@@ -1,0 +1,76 @@
+{
+  "browser": {
+    "port": 9322,
+    "timeoutMs": 30000,
+    "profileDirectory": null
+  },
+  "search": {
+    "perPage": 50,
+    "delayMs": 650,
+    "maxPages": 5,
+    "maxFeedBatches": 20
+  },
+  "eligibility": {
+    "freelancerCountry": null,
+    "inspectTop": 20,
+    "excludeIneligible": true
+  },
+  "ranking": {
+    "priorityKeywords": [
+      "ai trainer",
+      "ai training",
+      "claude trainer",
+      "copilot trainer",
+      "ai consultant",
+      "ai adoption",
+      "ai workshop",
+      "ai workflow",
+      "agentic ai",
+      "claude code",
+      "codex",
+      "rag",
+      "multi-agent",
+      "prompt engineering",
+      "responsible ai"
+    ],
+    "negativeKeywords": [
+      "commission only",
+      "unpaid trial",
+      "data entry"
+    ],
+    "minimumHourlyTarget": 75
+  },
+  "presets": {
+    "ai-trainers": {
+      "queries": [
+        "ai trainer",
+        "ai training",
+        "claude trainer",
+        "copilot trainer",
+        "ai workshop",
+        "ai adoption consultant",
+        "ai workflow coach"
+      ]
+    },
+    "ai-consulting": {
+      "queries": [
+        "ai consultant",
+        "generative ai consultant",
+        "ai implementation consultant",
+        "fractional ai leader",
+        "ai strategy"
+      ]
+    },
+    "agentic-systems": {
+      "queries": [
+        "agentic ai",
+        "ai agent development",
+        "multi-agent system",
+        "claude code",
+        "codex",
+        "mcp server",
+        "rag automation"
+      ]
+    }
+  }
+}

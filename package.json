@@ -1,0 +1,42 @@
+{
+  "name": "upwork-job-cli",
+  "version": "0.11.0",
+  "description": "Local Upwork discovery, job history, and evidence-grounded proposal preparation for independent professionals.",
+  "type": "module",
+  "bin": {
+    "upwork-jobs": "./src/cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "doctor": "node ./src/cli.mjs doctor",
+    "start": "node ./src/cli.mjs",
+    "check:release": "node scripts/check-release.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "cli-table3": "^0.6.5",
+    "commander": "^14.0.0",
+    "playwright-core": "^1.55.0"
+  },
+  "files": [
+    "src/",
+    "docs/",
+    "config.example.json",
+    "profile.example.json",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CONTRIBUTING.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/promptadvisers/upwork-jobs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/promptadvisers/upwork-jobs/issues"
+  },
+  "homepage": "https://github.com/promptadvisers/upwork-jobs#readme"
+}

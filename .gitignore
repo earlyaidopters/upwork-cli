@@ -1,0 +1,10 @@
+node_modules/
+.env*
+!.env.example
+.upwork-jobs/
+proposals/
+reports/
+handoff/
+*.sqlite*
+*.tgz
+.DS_Store
