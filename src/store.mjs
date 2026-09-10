@@ -482,9 +482,9 @@ export async function previouslySeenIds() {
 export async function findJob(uid) {
   const db = await openDatabase();
   try {
-    const value = String(uid);
-    const row = db.prepare('SELECT * FROM jobs WHERE uid = ? OR url LIKE ? LIMIT 1')
-      .get(value, `%${value}%`);
+    const value = String(uid).trim();
+    const reference = value.match(/~02(\d+)/)?.[1] || value;
+    const row = db.prepare('SELECT * FROM jobs WHERE uid = ?').get(reference);
     return row ? rowToJob(row) : null;
   } finally {
     db.close();

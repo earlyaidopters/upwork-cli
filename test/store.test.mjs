@@ -172,3 +172,14 @@ test('search refresh preserves structured locations for country re-evaluation', 
   await recordPull([job('1', 'Example')]);
   assert.deepEqual((await findJob('1')).allowedLocations, ['Canada']);
 });
+
+
+test('job lookup never selects a different job through a partial ID or SQL wildcard', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-exact-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  process.env.UPWORK_JOBS_HOME = root;
+  await recordPull([job('100', 'Synthetic A'), job('1000', 'Synthetic B')]);
+  assert.equal(await findJob('10'), null);
+  assert.equal(await findJob('%'), null);
+  assert.equal((await findJob('https://www.upwork.com/jobs/~02100/')).uid, '100');
+});
