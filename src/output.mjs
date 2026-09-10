@@ -32,9 +32,7 @@ export function renderTable(jobs) {
     style: { head: ['green'], border: ['grey'] },
   });
   jobs.forEach((job, index) => {
-    const eligibility = job.eligibleForProfile === false
-      ? 'LOCATION BLOCKED'
-      : (job.detailInspectedAt ? 'location checked' : 'location unknown');
+    const eligibility = eligibilityLabel(job);
     const client = [job.paymentVerified ? '✓' : '○', money(job.clientSpend), job.clientCountry, eligibility]
       .filter(Boolean).join(' ');
     table.push([
@@ -53,7 +51,7 @@ export function renderTable(jobs) {
 
 export function serializeJobs(jobs, format = 'table') {
   if (format === 'json') return `${JSON.stringify(jobs, null, 2)}\n`;
-  if (format === 'jsonl') return `${jobs.map((job) => JSON.stringify(job)).join('\n')}\n`;
+  if (format === 'jsonl') return jobs.map(job => `${JSON.stringify(job)}\n`).join('');
   if (format === 'csv') {
     return `${FIELDS.join(',')}\n${jobs.map((job) => FIELDS.map((field) => csvCell(job[field])).join(',')).join('\n')}\n`;
   }
@@ -64,8 +62,8 @@ export function serializeJobs(jobs, format = 'table') {
       `- Score: **${job.score ?? 0}**`,
       `- Budget: ${compactJobType(job) || 'Not listed'}`,
       `- Posted: ${job.posted || 'Unknown'} · Proposals: ${job.proposals || 'Unknown'}`,
-      `- Client: ${job.paymentVerified ? 'Payment verified' : 'Payment unverified'} · ${money(job.clientSpend) || 'No spend shown'} · ${job.clientCountry || 'Unknown'}`,
-      `- Eligibility: ${job.eligibleForProfile === false ? `Blocked (${job.locationRestriction || 'location restriction'})` : (job.detailInspectedAt ? `${job.locationRestriction || 'No hard restriction found'} · checked` : 'Unknown · full detail not inspected')}`,
+      `- Client: ${job.paymentVerified ? 'Payment verified' : 'Payment not confirmed'} · ${money(job.clientSpend) || 'No spend shown'} · ${job.clientCountry || 'Unknown'}`,
+      `- Eligibility: ${eligibilityLabel(job)}${job.locationRestriction ? ` (${job.locationRestriction})` : ''}`,
       `- Skills: ${(job.skills || []).join(', ') || 'None listed'}`,
       `- Why it ranked: ${(job.reasons || []).slice(0, 6).join('; ') || 'No score explanation'}`,
       '',
@@ -92,4 +90,10 @@ export async function outputJobs(jobs, options = {}) {
 
 export async function readJsonFile(filePath) {
   return JSON.parse(await fs.readFile(filePath, 'utf8'));
+}
+
+export function eligibilityLabel(job) {
+  if (job.eligibleForProfile === false) return 'LOCATION BLOCKED';
+  if (job.eligibleForProfile === true && job.detailInspectedAt) return 'location eligible';
+  return 'location unknown';
 }

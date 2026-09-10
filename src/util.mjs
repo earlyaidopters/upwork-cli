@@ -80,15 +80,19 @@ export function ageHours(value) {
 }
 
 export function csvCell(value) {
-  const string = Array.isArray(value) ? value.join(' | ') : String(value ?? '');
+  let string = Array.isArray(value) ? value.join(' | ') : String(value ?? '');
+  // Prevent text from a posting being evaluated as a spreadsheet formula.
+  if (typeof value !== 'number' && /^[\s]*[=+@-]/.test(string)) string = `'${string}`;
   return /[",\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
 }
 
 export async function writeAtomic(filePath, content) {
   await ensureDirectory(path.dirname(filePath));
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(temporary, content, { mode: 0o600 });
-  await fs.rename(temporary, filePath);
+  try {
+    await fs.writeFile(temporary, content, { mode: 0o600 });
+    await fs.rename(temporary, filePath);
+  } finally { await fs.rm(temporary, { force: true }).catch(() => {}); }
 }
 
 export function parseList(value) {

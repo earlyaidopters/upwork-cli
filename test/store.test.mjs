@@ -9,6 +9,7 @@ import {
   findJob,
   legacyDatabasePath,
   loadJobs,
+  loadJobsByIds,
   loadRuns,
   loadTrends,
   previouslySeenIds,
@@ -136,4 +137,38 @@ test('canonicalizes stored job URLs independently of malformed search slugs', as
     stored.url,
     'https://www.upwork.com/jobs/~021111111111111111104/',
   );
+});
+
+
+test('indexed cache reads return only requested jobs across batches', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-indexed-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  process.env.UPWORK_JOBS_HOME = root;
+  await recordPull(Array.from({length: 600}, (_, i) => job(String(i), `Synthetic ${i}`)));
+  const requested = Array.from({length: 550}, (_, i) => String(i));
+  const selected = await loadJobsByIds([...requested, '1', 'missing']);
+  assert.equal(selected.length, 550);
+  assert.deepEqual(new Set(selected.map(row => row.uid)), new Set(requested));
+  assert.deepEqual(await loadJobsByIds([]), []);
+});
+
+test('fresh unknown eligibility clears an older confirmed result', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-fresh-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  process.env.UPWORK_JOBS_HOME = root;
+  await recordPull([job('1', 'Example', {locationScope:'restricted', allowedLocations:['Canada'], eligibleForProfile:true, detailInspectedAt:'2026-09-10T01:00:00Z'})]);
+  await recordPull([job('1', 'Example', {locationScope:'unknown', allowedLocations:[], locationRestriction:null, eligibleForProfile:null, detailInspectedAt:'2026-09-10T02:00:00Z'})]);
+  const stored = await findJob('1');
+  assert.equal(stored.eligibleForProfile, null);
+  assert.equal(stored.locationScope, 'unknown');
+  assert.deepEqual(stored.allowedLocations, []);
+});
+
+test('search refresh preserves structured locations for country re-evaluation', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-locations-'));
+  t.after(async () => fs.rm(root, { recursive: true, force: true }));
+  process.env.UPWORK_JOBS_HOME = root;
+  await recordPull([job('1', 'Example', {locationScope:'restricted', allowedLocations:['Canada'], eligibleForProfile:true, detailInspectedAt:'2026-09-10T01:00:00Z'})]);
+  await recordPull([job('1', 'Example')]);
+  assert.deepEqual((await findJob('1')).allowedLocations, ['Canada']);
 });

@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { stateDirectory, writeAtomic } from './util.mjs';
 
+import { object, numeric, stringList } from './validation.mjs';
+
 export const DEFAULT_PROFILE = {
   "name": "",
   "positioning": "",
@@ -65,7 +67,8 @@ export function profilePath() {
 export async function loadProfile() {
   try {
     const profile = JSON.parse(await fs.readFile(profilePath(), 'utf8'));
-    return { ...structuredClone(DEFAULT_PROFILE), ...profile };
+    object(profile, 'Profile');
+    return validateProfile({ ...structuredClone(DEFAULT_PROFILE), ...profile });
   } catch (error) {
     if (error.code === 'ENOENT') return structuredClone(DEFAULT_PROFILE);
     throw new Error(`Could not read ${profilePath()}: ${error.message}`);
@@ -82,4 +85,29 @@ export async function initializeProfile({ force = false } = {}) {
   }
   await writeAtomic(destination, `${JSON.stringify(DEFAULT_PROFILE, null, 2)}\n`);
   return { created: true, path: destination };
+}
+
+export function validateProfile(profile) {
+  for (const key of ['name', 'positioning']) if (typeof profile[key] !== 'string') throw new Error(`profile.${key} must be a string.`);
+  if (profile.defaultHourlyRate !== null) profile.defaultHourlyRate = numeric(profile.defaultHourlyRate, 'profile.defaultHourlyRate', {min: 0.01});
+  for (const key of ['facts', 'voice', 'truthRules']) stringList(profile[key], `profile.${key}`);
+  object(profile.proposalVoice, 'profile.proposalVoice');
+  for (const key of ['coverLetterOrder', 'screeningAnswerOrder', 'cadenceExamples', 'rejectedMoves']) {
+    if (profile.proposalVoice[key] !== undefined) stringList(profile.proposalVoice[key], `profile.proposalVoice.${key}`);
+  }
+  if (!Array.isArray(profile.proof)) throw new Error('profile.proof must be an array.');
+  const ids = new Set();
+  for (const item of profile.proof) {
+    object(item, 'profile.proof item');
+    for (const key of ['id', 'title', 'summary']) if (typeof item[key] !== 'string' || !item[key].trim()) throw new Error(`Each proof needs a non-empty ${key}.`);
+    if (ids.has(item.id)) throw new Error(`Duplicate proof id: ${item.id}`);
+    ids.add(item.id);
+    for (const key of ['tags', 'urls']) stringList(item[key] || [], `proof.${item.id}.${key}`);
+    for (const link of item.urls || []) {
+      let url;
+      try { url = new URL(link); } catch { throw new Error(`Proof ${item.id} has an invalid URL.`); }
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error(`Proof ${item.id} needs an HTTP(S) URL without embedded credentials.`);
+    }
+  }
+  return profile;
 }

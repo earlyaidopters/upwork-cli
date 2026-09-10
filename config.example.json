@@ -13,7 +13,8 @@
   "eligibility": {
     "freelancerCountry": null,
     "inspectTop": 20,
-    "excludeIneligible": true
+    "excludeIneligible": true,
+    "maxDetailAgeHours": 24
   },
   "ranking": {
     "priorityKeywords": [

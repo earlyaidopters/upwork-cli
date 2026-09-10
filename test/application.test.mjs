@@ -401,3 +401,13 @@ test('replaces a masked rate instead of appending to the existing currency value
   assert.ok(events[1] === 'press:Meta+A' || events[1] === 'press:Control+A');
   assert.deepEqual(events.slice(2), ['press:Backspace', 'type:250', 'press:Tab']);
 });
+
+test('rejects fractional Connects and missing live base costs', () => {
+  const application = validApplication();
+  application.terms.expectedConnects = 1.5;
+  assert.ok(validateApplication(application).errors.some(error => error.includes('non-negative integer')));
+  application.terms.expectedConnects = 13;
+  const liveForm = {fields:[{question:'Cover Letter'}, ...questions.map(question => ({question}))], connectsRequired:null};
+  assert.ok(validateApplication(application, {liveForm}).errors.some(error => error.includes('Live base Connects')));
+  assert.equal(boostStateMatches({connectsRequired:null, boostConnects:5, totalConnects:5},5),false);
+});

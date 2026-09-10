@@ -228,7 +228,8 @@ export function classifyQuestion(question) {
 }
 
 export function selectEvidence(question, profile, limit = 3) {
-  const terms = new Set(String(question || '').toLowerCase().match(/[a-z][a-z0-9+-]{2,}/g) || []);
+  const stopWords = new Set(['the', 'and', 'for', 'you', 'your', 'with', 'have', 'has', 'what', 'that', 'this', 'from', 'about', 'our', 'are', 'was', 'can']);
+  const terms = new Set((String(question || '').toLowerCase().match(/[a-z][a-z0-9+-]{2,}/g) || []).filter(term => !stopWords.has(term)));
   return (profile.proof || [])
     .map((item) => {
       const haystack = `${item.title} ${item.summary} ${(item.tags || []).join(' ')}`.toLowerCase();
@@ -244,6 +245,7 @@ export function selectEvidence(question, profile, limit = 3) {
       if (kind === 'links' && item.urls?.length) score += 5;
       return { ...item, score };
     })
+    .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
@@ -259,7 +261,7 @@ export function assessOpportunity(job, profile) {
     score -= 100;
     risks.push(`Location blocked: ${job.locationRestriction || 'profile is outside the allowed location'}`);
   }
-  if (matches.length) positives.push(`Direct expertise match: ${matches.join(', ')}`);
+  if (matches.length) positives.push(`Topic match: ${matches.join(', ')}`);
   if (job.paymentVerified) { score += 6; positives.push('Payment method verified'); }
   if (job.phoneVerified) { score += 2; positives.push('Phone verified'); }
   if (job.activity?.lastViewed && (ageHours(job.activity.lastViewed) || 0) >= 168) {
@@ -280,7 +282,10 @@ export function assessOpportunity(job, profile) {
   score = Math.max(0, Math.min(100, score));
   return {
     score,
-    verdict: score >= 68 ? 'strong apply' : score >= 40 ? 'selective apply' : 'low priority',
+    verdict: job.eligibleForProfile === false ? 'location blocked'
+      : job.eligibleForProfile !== true || !job.detailInspectedAt ? 'inspect eligibility'
+      : !profile.proof?.length && !profile.facts?.length ? 'add your evidence'
+      : score >= 68 ? 'strong apply' : score >= 40 ? 'selective apply' : 'low priority',
     positives,
     risks,
   };
@@ -345,6 +350,7 @@ export function renderProposalPacket(packet) {
     '',
     'Evidence to draw from:',
     '',
+    ...(packet.coverLetter.evidence.length ? [] : ['No matching evidence supplied. Ask for relevant work before drafting claims.']),
     ...packet.coverLetter.evidence.map((item) => `- **${item.title}:** ${item.summary} ${item.urls?.join(' ') || ''}`),
     '',
     '## the freelancer’s copy operating system',

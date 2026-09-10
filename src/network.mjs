@@ -6,7 +6,7 @@ function operationNames(postData) {
     const parsed = JSON.parse(postData);
     const values = Array.isArray(parsed) ? parsed : [parsed];
     return values.flatMap((value) => {
-      if (value?.operationName) return [String(value.operationName)];
+      if (value?.operationName && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(value.operationName)) return [String(value.operationName)];
       const match = String(value?.query || '').match(/\b(?:query|mutation)\s+([A-Za-z0-9_]+)/);
       return match ? [match[1]] : [];
     });
@@ -18,7 +18,7 @@ function operationNames(postData) {
 function sanitizedUrl(value) {
   try {
     const url = new URL(value);
-    const allowed = new Set(['page', 'per_page', 'sort', 'q', 'topic_id', 'job_type']);
+    const allowed = new Set(['page', 'per_page', 'sort', 'job_type']);
     const params = {};
     for (const [key, item] of url.searchParams.entries()) {
       params[key] = allowed.has(key) ? item : '<redacted>';
@@ -34,7 +34,7 @@ export function startSanitizedTrace(page) {
   const byRequest = new WeakMap();
   const onRequest = (request) => {
     const url = sanitizedUrl(request.url());
-    if (!url.origin.includes('upwork.com')) return;
+    if (!/^https:\/\/(?:[a-z0-9-]+\.)*upwork\.com$/i.test(url.origin)) return;
     const entry = {
       timestamp: new Date().toISOString(),
       method: request.method(),

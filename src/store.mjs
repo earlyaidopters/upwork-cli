@@ -183,9 +183,11 @@ function migrateCanonicalJobUrls(db) {
 async function openDatabase({ migrate = true } = {}) {
   await ensureDirectory(path.dirname(databasePath()));
   const db = new DatabaseSync(databasePath());
-  ensureSchema(db);
-  if (migrate) await migrateLegacyJson(db);
-  return db;
+  try {
+    ensureSchema(db);
+    if (migrate) await migrateLegacyJson(db);
+    return db;
+  } catch (error) { db.close(); throw error; }
 }
 
 function validIso(value, fallback) {
@@ -266,11 +268,11 @@ const UPSERT_JOB_SQL = `
     client_spend_label = excluded.client_spend_label,
     client_country = excluded.client_country,
     location_scope = CASE
-      WHEN excluded.location_scope <> 'unknown' THEN excluded.location_scope
+      WHEN excluded.detail_inspected_at IS NOT NULL OR excluded.location_scope <> 'unknown' THEN excluded.location_scope
       ELSE jobs.location_scope
     END,
-    location_restriction = COALESCE(excluded.location_restriction, jobs.location_restriction),
-    eligible_for_profile = COALESCE(excluded.eligible_for_profile, jobs.eligible_for_profile),
+    location_restriction = CASE WHEN excluded.detail_inspected_at IS NOT NULL THEN excluded.location_restriction ELSE COALESCE(excluded.location_restriction, jobs.location_restriction) END,
+    eligible_for_profile = CASE WHEN excluded.detail_inspected_at IS NOT NULL THEN excluded.eligible_for_profile ELSE COALESCE(excluded.eligible_for_profile, jobs.eligible_for_profile) END,
     detail_inspected_at = COALESCE(excluded.detail_inspected_at, jobs.detail_inspected_at),
     experience_level = excluded.experience_level,
     duration = excluded.duration,
@@ -280,7 +282,7 @@ const UPSERT_JOB_SQL = `
     query_text = excluded.query_text,
     last_seen = excluded.last_seen,
     seen_count = jobs.seen_count + 1,
-    payload_json = excluded.payload_json
+    payload_json = json_patch(jobs.payload_json, excluded.payload_json)
 `;
 
 function uniqueJobs(jobs) {
@@ -347,13 +349,14 @@ function writeJobsAndRun(db, jobs, context = {}, { preserveTimes = false } = {})
   const now = validIso(context.completedAt, new Date().toISOString());
   const startedAt = validIso(context.startedAt, now);
   const existing = db.prepare('SELECT 1 FROM jobs WHERE uid = ?');
-  const known = new Set(rows.filter((job) => existing.get(String(job.uid))).map((job) => String(job.uid)));
-  const counts = { seen: rows.length, added: rows.length - known.size, updated: known.size };
+
   const upsert = db.prepare(UPSERT_JOB_SQL);
   const jobById = new Map(rows.map((job) => [String(job.uid), job]));
 
   db.exec('BEGIN IMMEDIATE');
   try {
+    const known = new Set(rows.filter(job => existing.get(String(job.uid))).map(job => String(job.uid)));
+    const counts = { seen: rows.length, added: rows.length - known.size, updated: known.size };
     for (const job of rows) upsert.run(...jobValues(job, now, { preserveTimes }));
     const runId = insertRun(db, {
       ...context,
@@ -435,6 +438,21 @@ export async function loadJobs({ limit = null } = {}) {
   } finally {
     db.close();
   }
+}
+
+export async function loadJobsByIds(ids) {
+  const unique = [...new Set(ids.filter(value => value != null).map(String))];
+  if (!unique.length) return [];
+  const db = await openDatabase();
+  try {
+    const jobs = [];
+    // Bounded batches stay below SQLite parameter limits for large hunts.
+    for (let offset = 0; offset < unique.length; offset += 500) {
+      const batch = unique.slice(offset, offset + 500);
+      jobs.push(...db.prepare(`SELECT * FROM jobs WHERE uid IN (${batch.map(() => '?').join(',')})`).all(...batch).map(rowToJob));
+    }
+    return jobs;
+  } finally { db.close(); }
 }
 
 export async function recordPull(jobs, context = {}) {

@@ -78,7 +78,7 @@ Start with a small live pull:
 
 ```bash
 upwork-jobs doctor
-upwork-jobs hunt ai-trainers --pages 1 --sort recent --max-age-hours 168 --inspect-top 25
+upwork-jobs hunt ai-trainers --pages 1 --sort recent --max-age-hours 168 --inspect-top 25 --eligible-only
 ```
 
 Other built-in presets are `ai-consulting` and `agentic-systems`. Supply your own phrases when you need a narrower hunt:
@@ -112,11 +112,11 @@ Net-new describes the database comparison, not when the client published the job
 
 ### Read eligibility and client fields carefully
 
-Only the highest-ranked `--inspect-top` candidates receive fresh full-detail inspection. Jobs outside that group can have unknown eligibility or older cached detail data. The normal filter removes confirmed incompatible jobs; unknown eligibility can still appear in discovery output.
+Only the highest-ranked `--inspect-top` candidates receive fresh full-detail inspection. Cached detail eligibility expires after 24 hours by default, controlled by `eligibility.maxDetailAgeHours`. It is recomputed for your current country. Jobs outside the inspected group can have unknown eligibility. The normal filter removes confirmed incompatible jobs; unknown eligibility can still appear in discovery output.
 
-For an actionable shortlist, require both a non-null `detailInspectedAt` and `eligibleForProfile === true`. Check the title and description for hard restrictions too. The parser recognizes standard platform location labels and selected explicit country restrictions; it cannot interpret every legal, residency, language, or regional requirement.
+Use `--eligible-only` for an actionable shortlist. It requires both a fresh `detailInspectedAt` and `eligibleForProfile === true`. Check the title and description for hard restrictions too. The parser recognizes standard platform location labels and selected explicit country restrictions; it cannot interpret every legal, residency, language, or regional requirement.
 
-Missing payment or client-history data is not proof of a bad client. Check the live posting before deciding. `--include-ineligible` is for inspecting excluded records deliberately.
+Unknown eligibility stays labeled unknown, including when a page was inspected but the restriction could not be resolved. Citizenship requirements need manual verification; residence does not establish citizenship. Missing payment or client-history data is not proof of a bad client. Check the live posting before deciding. `--include-ineligible` is for inspecting excluded records deliberately.
 
 ## Write like yourself
 
@@ -190,7 +190,7 @@ Chrome stores its own session material. Keep the state directory private. Applic
 
 Use `UPWORK_JOBS_HOME` for an isolated state directory. Additional overrides are `UPWORK_JOBS_CONFIG`, `UPWORK_JOBS_PROFILE`, `UPWORK_JOBS_CHROME`, `UPWORK_JOBS_PORT`, and `UPWORK_JOBS_CDP_TIMEOUT_MS`. Set a distinct browser port as well when running separate sessions.
 
-The optional `trace` diagnostic excludes headers, cookies, request variables, and response bodies. It can still contain URLs and search terms. Review diagnostic files before sharing them.
+The optional `trace` diagnostic excludes headers, cookies, request variables, and response bodies and redacts search-query parameters. It can still contain URL paths and the query supplied in trace metadata. Review diagnostic files before sharing them.
 
 ## Troubleshooting
 
@@ -214,6 +214,10 @@ node src/cli.mjs --help
 npm run check:release
 ```
 
-The tests run offline. They cover parsing, ranking, storage, proposal validation, browser ownership, and workflow state. They do not prove the live Upwork UI still matches every selector. Never test submissions using another person’s account or existing proposal state.
+Run `upwork-jobs doctor --offline` to check local readiness without connecting to Chrome. Invalid settings and numeric command options fail before browser work.
+
+The tests run offline. They cover parsing, ranking, storage, proposal validation, browser ownership, and workflow state. An end-to-end CLI test exercises setup, diagnostics, import, cache, proposal review, and approval rejection using isolated state. They do not prove the live Upwork UI still matches every selector. Never test submissions using another person’s account or existing proposal state.
 
 Use synthetic fixtures in tests. Do not commit profiles, browser sessions, job exports, proposal drafts, or private handoffs. See [CONTRIBUTING.md](CONTRIBUTING.md) for the release checks.
+
+See [performance and verification](docs/performance.md) for the repeatable cache benchmark and validation scope.

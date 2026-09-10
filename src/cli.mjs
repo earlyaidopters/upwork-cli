@@ -64,6 +64,7 @@ import {
   databaseStats,
   findJob,
   loadJobs,
+  loadJobsByIds,
   loadQueryTrends,
   loadRuns,
   loadTrends,
@@ -71,6 +72,8 @@ import {
 } from './store.mjs';
 import { clamp, parseList, proposalMaximum, sleep, stateDirectory, uniqueBy, writeAtomic } from './util.mjs';
 
+import { validateCommandOptions } from './validation.mjs';
+import { hydrateEligibility } from './eligibility.mjs';
 import { configureMember } from './setup.mjs';
 
 const program = new Command();
@@ -78,7 +81,7 @@ const program = new Command();
 program
   .name('upwork-jobs')
   .description('Local Upwork job search, ranking, proposal preparation, and sanitized network tracing.')
-  .version('0.11.1');
+  .version('0.12.0');
 
 function addOutputOptions(command) {
   return command
@@ -93,6 +96,7 @@ function addOutputOptions(command) {
     .option('--verified', 'only payment-verified clients')
     .option('--exclude <terms>', 'comma-separated local exclusion terms')
     .option('--inspect-top <number>', 'inspect full details for the top N candidates before ranking output')
+    .option('--eligible-only', 'only jobs with fresh, confirmed location eligibility')
     .option('--include-ineligible', 'include jobs confirmed incompatible with the configured freelancer location')
     .option('--all', 'include previously seen jobs; pulls show only net-new jobs by default')
     .option('--new-only', 'only jobs not present in the database before this run (default)')
@@ -132,6 +136,7 @@ async function inspectTopCandidates(page, jobs, options, config) {
       locationRestriction: detail.locationRestriction,
       allowedLocations: detail.allowedLocations,
       eligibleForProfile: detail.eligibleForProfile,
+      eligibilityCountry: config.eligibility.freelancerCountry,
       detailInspectedAt: detail.detailInspectedAt,
       proposals: detail.activity?.proposals || job.proposals,
       proposalsMax: proposalMaximum(detail.activity?.proposals) ?? job.proposalsMax,
@@ -149,32 +154,22 @@ async function inspectTopCandidates(page, jobs, options, config) {
   }
   const blocked = [...details.values()].filter((job) => job.eligibleForProfile === false).length;
   if (targets.length) {
-    process.stderr.write(`Eligibility inspection: ${targets.length} checked, ${blocked} incompatible.\n`);
+    process.stderr.write(`Eligibility inspection: ${details.size} checked, ${targets.length - details.size} unavailable, ${blocked} incompatible.\n`);
   }
   return details;
 }
 
 async function finishJobs(rawJobs, options, config, runContext = {}, page = null) {
-  const cachedJobs = await loadJobs();
-  const cachedById = new Map(cachedJobs.map((job) => [String(job.uid), job]));
-  const seenBefore = new Set(cachedJobs.map((job) => String(job.uid)));
-  const hydrated = rawJobs.map((job) => {
-    const cached = cachedById.get(String(job.uid));
-    if (!cached?.detailInspectedAt || job.detailInspectedAt) return job;
-    return {
-      ...job,
-      locationScope: cached.locationScope,
-      locationRestriction: cached.locationRestriction,
-      allowedLocations: cached.allowedLocations,
-      eligibleForProfile: cached.eligibleForProfile,
-      detailInspectedAt: cached.detailInspectedAt,
-    };
-  });
+  const cachedJobs = await loadJobsByIds(rawJobs.map(job => job.uid));
+  const cachedById = new Map(cachedJobs.map(job => [String(job.uid), job]));
+  const seenBefore = new Set(cachedById.keys());
+  const hydrated = rawJobs.map(job => hydrateEligibility(job, cachedById.get(String(job.uid)), config.eligibility));
   let ranked = rankJobs(uniqueBy(hydrated, 'uid'), config);
   if (page) {
     const candidates = filterJobs(selectPullOutput(ranked, seenBefore, options), {
       ...options,
       eligibleOnly: false,
+      confirmedEligibleOnly: false,
     });
     const detailById = await inspectTopCandidates(page, candidates, options, config);
     ranked = rankJobs(ranked.map((job) => detailById.get(String(job.uid)) || job), config);
@@ -201,6 +196,7 @@ async function finishJobs(rawJobs, options, config, runContext = {}, page = null
   let jobs = selectPullOutput(ranked, seenBefore, options);
   jobs = filterJobs(jobs, {
     ...options,
+    confirmedEligibleOnly: options.eligibleOnly,
     eligibleOnly: !options.includeIneligible && config.eligibility?.excludeIneligible !== false,
   }).slice(0, Math.max(1, Number(options.limit || 50)));
   process.stderr.write(
@@ -507,6 +503,7 @@ addOutputOptions(program.command('feed [feed]')
   .description('Pull a personalized feed; feed is best, recent, or mine.')
   .option('-b, --batches <number>', 'Load More Jobs clicks; each normally adds 10 jobs', '3')
   .action(async (feed = 'best', options) => {
+    validateCommandOptions({ feed });
     const startedAt = new Date().toISOString();
     const config = await loadConfig();
     const batches = clamp(options.batches, 0, config.search.maxFeedBatches);
@@ -538,11 +535,11 @@ addOutputOptions(program.command('hunt [preset]')
     const pages = clamp(options.pages, 1, config.search.maxPages);
     await withBrowser(config, 'https://www.upwork.com/nx/find-work/best-matches', async ({ page }) => {
       const all = [];
-      for (const query of queries) {
+      for (const query of [...new Set(queries.map(value => value.trim()))]) {
         process.stderr.write(`Searching: ${query}\n`);
         const jobs = await collectSearch(page, query, {
           pages,
-          perPage: 50,
+          perPage: config.search.perPage,
           sort: options.sort,
           delayMs: config.search.delayMs,
         });
@@ -573,7 +570,7 @@ program.command('trace')
       if (options.mode === 'search') {
         await collectSearch(page, options.query, {
           pages: clamp(options.pages, 1, config.search.maxPages),
-          perPage: 50,
+          perPage: config.search.perPage,
           sort: 'recent',
           delayMs: config.search.delayMs,
         });
@@ -1032,7 +1029,9 @@ program.command('cache')
   .addOption(new Option('-f, --format <format>').choices(['table', 'json', 'jsonl', 'csv', 'markdown']).default('table'))
   .option('-o, --output <file>')
   .action(async (options) => {
-    const jobs = await loadJobs({ limit: Number(options.limit) });
+    const config = await loadConfig();
+    const stored = await loadJobs({ limit: Number(options.limit) });
+    const jobs = stored.map(job => hydrateEligibility(job, null, config.eligibility));
     await outputJobs(jobs, { ...options, output: options.output ? path.resolve(options.output) : null });
   });
 
@@ -1123,13 +1122,22 @@ program.command('open <uid>')
 
 program.command('doctor')
   .description('Check Node, Chrome, configuration, local profile, cache, and authentication state.')
-  .action(async () => {
+  .option('--offline', 'check local readiness without connecting to Chrome')
+  .action(async (options) => {
     const config = await loadConfig();
     const chrome = await findChromeExecutable().catch((error) => `ERROR: ${error.message}`);
-    const status = await browserStatus(config);
+    const status = options.offline ? { running: false, checked: false } : await browserStatus(config);
+    const profile = await loadProfile();
+    const nextSteps = [];
+    if (!config.eligibility.freelancerCountry) nextSteps.push('Run upwork-jobs setup to set your country.');
+    if (!profile.defaultHourlyRate) nextSteps.push('Set your own default proposal rate with upwork-jobs setup.');
+    if (!profile.proof.length && !profile.facts.length) nextSteps.push('Add verified evidence using docs/voice-workbook.md before drafting.');
+    if (!options.offline && !status.running) nextSteps.push('Run upwork-jobs auth to start your dedicated Chrome session.');
     const history = await databaseStats();
     const report = {
       node: process.version,
+      nextSteps,
+      readiness: { countryConfigured: Boolean(config.eligibility.freelancerCountry), rateConfigured: Boolean(profile.defaultHourlyRate), evidenceCount: profile.proof.length, factCount: profile.facts.length },
       chrome,
       config: configPath(),
       profile: profilePath(),
@@ -1161,6 +1169,8 @@ program.command('doctor')
 program.configureOutput({
   outputError: (string, write) => write(`Error: ${string.replace(/^error:\s*/i, '')}`),
 });
+
+program.hook('preAction', (_command, action) => validateCommandOptions(action.opts()));
 
 try {
   await program.parseAsync(process.argv);

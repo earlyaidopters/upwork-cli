@@ -147,6 +147,7 @@ export function filterJobs(jobs, options = {}) {
     if (options.maxProposals != null && (job.proposalsMax ?? Infinity) > Number(options.maxProposals)) return false;
     if (options.minClientSpend != null && (job.clientSpend ?? 0) < Number(options.minClientSpend)) return false;
     if (options.maxAgeHours != null && (job.ageHours ?? Infinity) > Number(options.maxAgeHours)) return false;
+    if (options.confirmedEligibleOnly && (job.eligibleForProfile !== true || !job.detailInspectedAt)) return false;
     if (options.eligibleOnly && job.eligibleForProfile === false) return false;
     const text = `${job.title} ${job.description} ${(job.skills || []).join(' ')}`.toLowerCase();
     if (excluded.some((term) => text.includes(term))) return false;

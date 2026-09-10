@@ -42,3 +42,12 @@ test('supports multiple platform locations and case-insensitive country names', 
   assert.equal(locationEligibility(text, 'UK').eligibleForProfile, true);
   assert.equal(locationEligibility(text, 'United States').eligibleForProfile, false);
 });
+
+test('citizenship is not inferred from country of residence', () => {
+  assert.equal(locationEligibility('Worldwide US citizens only', 'USA').eligibleForProfile, null);
+  assert.equal(locationEligibility('Worldwide must be a US citizen', 'Canada').eligibleForProfile, null);
+});
+
+test('common country codes resolve for international members', () => {
+  assert.equal(locationEligibility('Only freelancers located in Germany may apply.', 'DE').eligibleForProfile, true);
+});

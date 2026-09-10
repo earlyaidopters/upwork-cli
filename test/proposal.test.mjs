@@ -70,6 +70,8 @@ test('prioritizes the strongest context-specific proof', () => {
 test('flags an excellent but stale opportunity as selective', () => {
   const result = assessOpportunity({
     title: 'Enterprise AI Trainer: Claude workflows and agents',
+    eligibleForProfile: true,
+    detailInspectedAt: new Date().toISOString(),
     description: 'Hands-on workshop covering MCP, automation, and AI adoption.',
     hourlyMax: 250,
     paymentVerified: true,

@@ -31,7 +31,7 @@ const REQUIRED_SUBMISSION_POLICY = {
 };
 
 function number(value) {
-  if (value == null || String(value).trim() === '') return null;
+  if (!['number', 'string'].includes(typeof value) || String(value).trim() === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -418,9 +418,9 @@ export function validateApplication(application, { liveForm = null, job = null }
     errors.push('terms.hourlyRate must be greater than zero');
   }
   const maxConnects = number(application?.terms?.maxConnects);
-  if (maxConnects == null || maxConnects < 0) errors.push('terms.maxConnects must be zero or greater');
+  if (maxConnects == null || maxConnects < 0 || !Number.isInteger(maxConnects)) errors.push('terms.maxConnects must be a non-negative integer');
   const expectedConnects = number(application?.terms?.expectedConnects);
-  if (expectedConnects == null || expectedConnects <= 0) errors.push('terms.expectedConnects must be greater than zero');
+  if (expectedConnects == null || expectedConnects < 0 || !Number.isInteger(expectedConnects)) errors.push('terms.expectedConnects must be a non-negative integer');
   if (expectedConnects != null && expectedConnects > maxConnects) {
     errors.push(`Expected ${expectedConnects} Connects exceeds maxConnects ${maxConnects}`);
   }
@@ -476,6 +476,8 @@ export function validateApplication(application, { liveForm = null, job = null }
   }
 
   if (liveForm) {
+    const liveBase = number(liveForm.connectsRequired);
+    if (liveBase === null || !Number.isInteger(liveBase) || liveBase < 0) errors.push('Live base Connects could not be verified as a non-negative integer');
     const liveQuestions = (liveForm.fields || []).slice(1).map((field) => normalizeQuestion(field.question));
     const applicationQuestions = answers.map((item) => normalizeQuestion(item.question));
     if (liveQuestions.length !== applicationQuestions.length) {
@@ -522,11 +524,11 @@ export function comboboxSelectionMatches(value, option) {
 
 export function boostStateMatches(form, requestedBoost) {
   const boost = Number(requestedBoost || 0);
-  const base = Number(form?.connectsRequired);
+  const base = number(form?.connectsRequired);
   const observedBoost = Number(form?.boostConnects);
   const total = Number(form?.totalConnects);
   return boost > 0
-    && Number.isFinite(base)
+    && Number.isInteger(base) && base >= 0
     && observedBoost === boost
     && total === base + boost;
 }

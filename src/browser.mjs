@@ -178,7 +178,10 @@ export async function connectBrowser(config, {
     timeout: cdpConnectTimeout(config),
   });
   const context = browser.contexts()[0];
-  if (!context) throw new Error('Chrome connected, but no browser context was available.');
+  if (!context) {
+    await browser.close().catch(() => {});
+    throw new Error('Chrome connected, but no browser context was available.');
+  }
 
   const pages = context.pages();
   const selectedIndex = selectBrowserPageIndex(pages.map((candidate) => candidate.url()), target, { exactPage });
