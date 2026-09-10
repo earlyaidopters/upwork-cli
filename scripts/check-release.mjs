@@ -37,10 +37,14 @@ try {
   delete env.UPWORK_JOBS_PROFILE;
   const execute = args => run(process.execPath, [cli, ...args], { env });
   const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  if (manifest.private !== true) throw new Error('npm publication must remain disabled by default');
   if (execute(['--version']).trim() !== manifest.version) throw new Error('CLI/package version mismatch');
   execute(['init']);
   const profile = JSON.parse(await fs.readFile(path.join(env.UPWORK_JOBS_HOME, 'profile.json'), 'utf8'));
   if (profile.name || profile.defaultHourlyRate !== null || profile.facts.length || profile.proof.length) throw new Error('Fresh profile contains inherited personal data');
+  execute(['setup', '--country', 'Canada', '--rate', '100']);
+  const configured = JSON.parse(await fs.readFile(path.join(env.UPWORK_JOBS_HOME, 'profile.json'), 'utf8'));
+  if (configured.defaultHourlyRate !== 100 || configured.facts.length) throw new Error('Installed setup failed');
   const stats = JSON.parse(execute(['history', 'stats']));
   if (stats.jobs !== 0 || stats.runs !== 0) throw new Error('Fresh install inherited job history');
   await fs.access(execute(['proposal', 'playbook']).trim());

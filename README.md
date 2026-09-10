@@ -4,7 +4,7 @@ Find relevant work. Keep a history of what you have seen. Write proposals from y
 
 Built for the Early AI adopters community, this CLI brings Upwork search, local ranking, SQLite history, and proposal preparation into one terminal workflow. A dedicated Chrome profile handles your signed-in session. Your evidence profile supplies your experience and voice.
 
-**Community edition, v0.11.0.** Offline tests and a clean package installation are verified. Browser automation depends on Upwork’s current pages and can stop when those pages change. Live submission has financial consequences; every proposal requires exact-content approval and a separate Connects confirmation.
+**Private community development.** Repository access is restricted to invited collaborators. npm publishing is disabled by default. Offline tests and a clean package installation are verified. Browser automation depends on Upwork’s current pages and can stop when those pages change. Live submission has financial consequences; every proposal requires exact-content approval and a separate Connects confirmation.
 
 [Get started](#get-started) · [Find work](#find-work) · [Write like yourself](#write-like-yourself) · [Proposal workflow](#proposal-workflow) · [Troubleshooting](#troubleshooting)
 
@@ -28,14 +28,14 @@ The CLI does not generate prose by calling an AI model. Use the packet with your
 
 You need Node.js **22.5 or later**, npm, Google Chrome, and an Upwork freelancer account. Chrome discovery includes macOS, Windows, and Linux paths; live behavior must be checked on your platform. The CLI uses Node’s built-in SQLite, which may print an experimental-feature warning on older supported Node versions.
 
-Clone the repository and install locally:
+With repository access and GitHub authentication configured, clone and install locally:
 
 ```bash
 git clone https://github.com/promptadvisers/upwork-jobs.git
 cd upwork-jobs
 npm ci
 npm link
-upwork-jobs init
+upwork-jobs setup
 upwork-jobs auth
 upwork-jobs doctor
 ```
@@ -45,6 +45,14 @@ upwork-jobs doctor
 `auth` opens a dedicated Chrome window. Sign in there and complete any verification yourself. The CLI attaches to that session through localhost. It never needs cookies copied from your everyday browser.
 
 `init` creates private configuration and profile files. It leaves existing files intact. **`init --force` overwrites both files**, so use it only when you intend to reset them.
+
+`setup` asks for your country and hourly rate, saves them privately, and preserves your existing evidence and preferences. Press Enter to keep a field unchanged. It does not open a browser or apply to jobs. For an assistant or a non-interactive terminal, supply explicit values:
+
+```bash
+upwork-jobs setup --country "Canada" --rate 100
+```
+
+These are examples; use your own country and rate. `upwork-jobs init` remains available for empty defaults.
 
 ### Set your country and search preferences
 

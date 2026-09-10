@@ -71,12 +71,14 @@ import {
 } from './store.mjs';
 import { clamp, parseList, proposalMaximum, sleep, stateDirectory, uniqueBy, writeAtomic } from './util.mjs';
 
+import { configureMember } from './setup.mjs';
+
 const program = new Command();
 
 program
   .name('upwork-jobs')
   .description('Local Upwork job search, ranking, proposal preparation, and sanitized network tracing.')
-  .version('0.11.0');
+  .version('0.11.1');
 
 function addOutputOptions(command) {
   return command
@@ -227,6 +229,28 @@ program.command('init')
     const profileResult = await initializeProfile(options);
     console.log(configResult.created ? `Created ${configResult.path}` : `${configResult.path} already exists`);
     console.log(profileResult.created ? `Created ${profileResult.path}` : `${profileResult.path} already exists`);
+  });
+
+program.command('setup')
+  .description('Configure your private country and hourly rate; preserve existing evidence and preferences.')
+  .option('--country <country>', 'your actual country of residence')
+  .option('--rate <number>', 'your default hourly proposal rate')
+  .action(async (options) => {
+    if (options.country === undefined && options.rate === undefined) {
+      if (!process.stdin.isTTY) throw new Error('Interactive setup requires a terminal. Use setup --country "Your country" --rate 100, or init for empty defaults.');
+      const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
+      try {
+        console.log('Configure your private profile. Press Enter to keep an existing value or leave it unset.');
+        const country = (await prompt.question('Country of residence: ')).trim();
+        const rate = (await prompt.question('Default hourly proposal rate (USD): ')).trim();
+        if (country) options.country = country;
+        if (rate) options.rate = rate;
+      } finally {
+        prompt.close();
+      }
+    }
+    const result = await configureMember(options);
+    console.log(`Private settings saved.\nConfig: ${result.configPath}\nEvidence profile: ${result.profilePath}\n\nNext: run upwork-jobs auth, then upwork-jobs doctor.\nBefore drafting, add your own evidence using docs/voice-workbook.md.`);
   });
 
 async function proposalContext(config, input, { includeForm = true } = {}) {
