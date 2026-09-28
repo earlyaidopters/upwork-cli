@@ -7,7 +7,6 @@ import {
   databasePath,
   databaseStats,
   findJob,
-  legacyDatabasePath,
   loadJobs,
   loadJobsByIds,
   loadRuns,
@@ -34,27 +33,6 @@ function job(uid, title, extras = {}) {
     ...extras,
   };
 }
-
-test('migrates the legacy JSON cache into SQLite without deleting it', async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-migrate-'));
-  t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_CLI_HOME = root;
-  await fs.mkdir(path.dirname(legacyDatabasePath()), { recursive: true });
-  await fs.writeFile(legacyDatabasePath(), JSON.stringify({
-    version: 1,
-    jobs: [job('100', 'Legacy Claude Trainer', {
-      firstSeen: '2026-08-01T00:00:00.000Z',
-      lastSeen: '2026-08-02T00:00:00.000Z',
-    })],
-  }));
-
-  const jobs = await loadJobs();
-  assert.equal(databasePath().endsWith('jobs.sqlite'), true);
-  assert.equal(jobs.length, 1);
-  assert.equal(jobs[0].title, 'Legacy Claude Trainer');
-  assert.equal(jobs[0].firstSeen, '2026-08-01T00:00:00.000Z');
-  assert.equal((await fs.stat(legacyDatabasePath())).isFile(), true);
-});
 
 test('records canonical jobs, per-query sightings, runs, and net-new deltas', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-runs-'));

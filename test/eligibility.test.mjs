@@ -51,3 +51,36 @@ test('citizenship is not inferred from country of residence', () => {
 test('common country codes resolve for international members', () => {
   assert.equal(locationEligibility('Only freelancers located in Germany may apply.', 'DE').eligibleForProfile, true);
 });
+
+test('recognizes any country and common regions in explicit restrictions', () => {
+  const cases = [
+    ['EU residents only', 'Germany', true],
+    ['EU residents only', 'Canada', false],
+    ['Europe only', 'France', true],
+    ['LATAM only', 'Brazil', true],
+    ['LATAM only', 'Spain', false],
+    ['Must be based in Germany', 'Austria', false],
+    ['US/Canada only', 'CA', true],
+    ['Must be based in the US or Canada', 'Mexico', false],
+    ['UK/EU only', 'Ireland', true],
+    ['Trinidad & Tobago only', 'Trinidad and Tobago', true],
+    ['Only freelancers located in Asia may apply.', 'India', true],
+    ['Only freelancers located in Asia may apply.', 'Kenya', false],
+  ];
+  for (const [text, country, expected] of cases) {
+    assert.equal(locationEligibility(`Worldwide ${text}`, country).eligibleForProfile, expected, `${text} / ${country}`);
+  }
+});
+
+test('ambiguous regions and unrecognized list entries stay unknown instead of blocked', () => {
+  assert.equal(locationEligibility('Europe only', 'Turkey').eligibleForProfile, null);
+  assert.equal(locationEligibility('Only freelancers located in Canada or Narnia may apply.', 'United States').eligibleForProfile, null);
+  assert.equal(locationEligibility('Must be based in the US and speak English', 'Canada').eligibleForProfile, null);
+});
+
+test('state names, lowercase "us", and personal names are not country restrictions', () => {
+  for (const text of ['Contact us only via Upwork', 'New Jersey residents only', 'New Mexico applicants only', 'Georgia residents only', 'Indiana residents only', 'Jordan only']) {
+    const requirement = extractLocationRequirement(`Worldwide ${text}`);
+    assert.equal(requirement.locationScope, 'worldwide', text);
+  }
+});

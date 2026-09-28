@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ageHours, canonicalJobUrl, ensureDirectory, stateDirectory } from './util.mjs';
@@ -7,10 +6,6 @@ const SCHEMA_VERSION = 4;
 
 export function databasePath() {
   return path.join(stateDirectory(), 'data', 'jobs.sqlite');
-}
-
-export function legacyDatabasePath() {
-  return path.join(stateDirectory(), 'data', 'jobs.json');
 }
 
 function ensureSchema(db) {
@@ -107,85 +102,17 @@ function ensureSchema(db) {
   for (const [name, definition] of additions) {
     if (!jobColumns.has(name)) db.exec(`ALTER TABLE jobs ADD COLUMN ${name} ${definition}`);
   }
-  migrateCanonicalJobUrls(db);
-  migrateUidJobUrls(db);
   db.prepare(`
     INSERT INTO metadata (key, value) VALUES ('schema_version', ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run(String(SCHEMA_VERSION));
 }
 
-function migrateUidJobUrls(db) {
-  const migrated = db.prepare('SELECT value FROM metadata WHERE key = ?').get('uid_job_urls_v1');
-  if (migrated) return Number(migrated.value || 0);
-  const jobs = db.prepare('SELECT uid, payload_json FROM jobs').all();
-  const updateJob = db.prepare('UPDATE jobs SET url = ?, payload_json = ? WHERE uid = ?');
-  const sightings = db.prepare('SELECT id, job_uid, snapshot_json FROM sightings').all();
-  const updateSighting = db.prepare('UPDATE sightings SET snapshot_json = ? WHERE id = ?');
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    for (const row of jobs) {
-      const payload = JSON.parse(row.payload_json || '{}');
-      const url = canonicalJobUrl(row.uid);
-      payload.url = url;
-      updateJob.run(url, JSON.stringify(payload), row.uid);
-    }
-    for (const row of sightings) {
-      const snapshot = JSON.parse(row.snapshot_json || '{}');
-      snapshot.url = canonicalJobUrl(row.job_uid);
-      updateSighting.run(JSON.stringify(snapshot), row.id);
-    }
-    db.prepare(`
-      INSERT INTO metadata (key, value) VALUES ('uid_job_urls_v1', ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).run(String(jobs.length));
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-  return jobs.length;
-}
-
-function migrateCanonicalJobUrls(db) {
-  const migrated = db.prepare('SELECT value FROM metadata WHERE key = ?').get('canonical_job_urls_v1');
-  if (migrated) return Number(migrated.value || 0);
-  const jobs = db.prepare('SELECT uid, title, payload_json FROM jobs').all();
-  const titles = new Map(jobs.map((row) => [String(row.uid), row.title || '']));
-  const updateJob = db.prepare('UPDATE jobs SET url = ?, payload_json = ? WHERE uid = ?');
-  const sightings = db.prepare('SELECT id, job_uid, snapshot_json FROM sightings').all();
-  const updateSighting = db.prepare('UPDATE sightings SET snapshot_json = ? WHERE id = ?');
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    for (const row of jobs) {
-      const payload = JSON.parse(row.payload_json || '{}');
-      const url = canonicalJobUrl(row.uid, row.title || payload.title);
-      payload.url = url;
-      updateJob.run(url, JSON.stringify(payload), row.uid);
-    }
-    for (const row of sightings) {
-      const snapshot = JSON.parse(row.snapshot_json || '{}');
-      snapshot.url = canonicalJobUrl(row.job_uid, snapshot.title || titles.get(String(row.job_uid)));
-      updateSighting.run(JSON.stringify(snapshot), row.id);
-    }
-    db.prepare(`
-      INSERT INTO metadata (key, value) VALUES ('canonical_job_urls_v1', ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).run(String(jobs.length));
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-  return jobs.length;
-}
-
-async function openDatabase({ migrate = true } = {}) {
+async function openDatabase() {
   await ensureDirectory(path.dirname(databasePath()));
   const db = new DatabaseSync(databasePath());
   try {
     ensureSchema(db);
-    if (migrate) await migrateLegacyJson(db);
     return db;
   } catch (error) { db.close(); throw error; }
 }
@@ -203,9 +130,9 @@ function estimatePostedAt(job, fallback) {
   return new Date(new Date(scrapedAt).getTime() - Number(age) * 60 * 60 * 1000).toISOString();
 }
 
-function jobValues(job, now, { preserveTimes = false } = {}) {
-  const firstSeen = preserveTimes ? validIso(job.firstSeen, now) : now;
-  const lastSeen = preserveTimes ? validIso(job.lastSeen, now) : now;
+function jobValues(job, now) {
+  const firstSeen = now;
+  const lastSeen = now;
   const canonicalUrl = canonicalJobUrl(job.uid, job.title) || job.url || null;
   const payload = { ...job, url: canonicalUrl, firstSeen, lastSeen };
   return [
@@ -343,7 +270,7 @@ function insertSightings(db, runId, observations, jobById, seenAt) {
   }
 }
 
-function writeJobsAndRun(db, jobs, context = {}, { preserveTimes = false } = {}) {
+function writeJobsAndRun(db, jobs, context = {}) {
   const rows = uniqueJobs(jobs);
   const observations = context.observations || jobs || [];
   const now = validIso(context.completedAt, new Date().toISOString());
@@ -357,7 +284,7 @@ function writeJobsAndRun(db, jobs, context = {}, { preserveTimes = false } = {})
   try {
     const known = new Set(rows.filter(job => existing.get(String(job.uid))).map(job => String(job.uid)));
     const counts = { seen: rows.length, added: rows.length - known.size, updated: known.size };
-    for (const job of rows) upsert.run(...jobValues(job, now, { preserveTimes }));
+    for (const job of rows) upsert.run(...jobValues(job, now));
     const runId = insertRun(db, {
       ...context,
       startedAt,
@@ -370,33 +297,6 @@ function writeJobsAndRun(db, jobs, context = {}, { preserveTimes = false } = {})
     db.exec('ROLLBACK');
     throw error;
   }
-}
-
-async function migrateLegacyJson(db) {
-  const migrated = db.prepare('SELECT value FROM metadata WHERE key = ?').get('legacy_json_migrated_v1');
-  if (migrated) return Number(migrated.value || 0);
-  let jobs = [];
-  try {
-    const data = JSON.parse(await fs.readFile(legacyDatabasePath(), 'utf8'));
-    jobs = Array.isArray(data) ? data : (Array.isArray(data.jobs) ? data.jobs : []);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw new Error(`Could not migrate legacy job cache: ${error.message}`);
-  }
-  if (jobs.length) {
-    writeJobsAndRun(db, jobs, {
-      command: 'legacy-json-migration',
-      observations: jobs,
-      queries: [],
-      options: { source: legacyDatabasePath() },
-      startedAt: new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    }, { preserveTimes: true });
-  }
-  db.prepare(`
-    INSERT INTO metadata (key, value) VALUES ('legacy_json_migrated_v1', ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(String(jobs.length));
-  return jobs.length;
 }
 
 function rowToJob(row) {

@@ -17,7 +17,7 @@ A local macOS run on Node v26.5.0 measured a 46.03 ms median for the full-cache 
 - Unknown eligibility is never labeled eligible. `--eligible-only` filters to inspected, confirmed results.
 - Proposal review requires non-negative integer Connects. Missing live base Connects blocks live validation.
 - Empty profiles supply no inherited evidence. Unmatched proof is omitted from packets.
-- CSV exports neutralize formula-like text. Trace capture restricts hosts and redacts query parameters.
+- CSV exports neutralize formula-like text.
 
 ## What the checks prove
 
