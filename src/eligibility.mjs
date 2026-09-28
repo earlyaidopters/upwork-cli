@@ -1,57 +1,53 @@
 import { cleanText } from './util.mjs';
+import { findLocations, LOCATION_SOURCE, REGIONS, resolveLocation } from './regions.mjs';
 
-const COUNTRY_ALIASES = new Map([
-  ['u.s.', 'United States'],
-  ['u.s', 'United States'],
-  ['us', 'United States'],
-  ['usa', 'United States'],
-  ['u.s.a', 'United States'],
-  ['united states', 'United States'],
-  ['united states of america', 'United States'],
-  ['ca', 'Canada'],
-  ['can', 'Canada'],
-  ['canada', 'Canada'],
-  ['uk', 'United Kingdom'],
-  ['u.k', 'United Kingdom'],
-  ['united kingdom', 'United Kingdom'],
-]);
+const displayNames = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' });
 
 export function canonicalLocation(value) {
   const cleaned = cleanText(value).replace(/^the\s+/i, '').replace(/[.]+$/, '').trim();
-  const alias = COUNTRY_ALIASES.get(cleaned.toLowerCase());
-  if (alias) return alias;
-  if (/^[a-z]{2}$/i.test(cleaned)) return new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' }).of(cleaned.toUpperCase()) || cleaned;
+  const known = resolveLocation(cleaned);
+  if (known) return known.name;
+  if (/^[a-z]{2}$/i.test(cleaned)) return displayNames.of(cleaned.toUpperCase()) || cleaned;
   return cleaned;
+}
+
+const SEPARATOR = String.raw`\s*(?:,|\/|&|\bor\b|\band\b)\s*(?:the\s+)?`;
+const LIST = `${LOCATION_SOURCE}\\.?(?:${SEPARATOR}${LOCATION_SOURCE}\\.?)*`;
+// A list that continues past what we recognize ("US or Narnia") is not a confirmed restriction.
+const LIST_END = String.raw`(?!\s*(?:\/|&|\bor\b|\band\b)\s*(?:the\s+)?[a-z])`;
+const NOUN = String.raw`(?:residents?|freelancers?|applicants?|candidates?|talent|contractors?|developers?|people)`;
+
+// Explicit body/title restrictions override a generic Worldwide location label.
+const HARD_PATTERNS = [
+  new RegExp(String.raw`(?<![a-z])(${LIST})(?:[ -]+based)?[ -]+(?:${NOUN}\s+)?only\b`, 'i'),
+  new RegExp(String.raw`\bonly\s+(?:(?:accepting|hiring|considering)\s+)?${NOUN}\s+(?:(?:who\s+are\s+)?(?:based|located|residing|living)\s+)?(?:in|from)\s+(?:the\s+)?(${LIST})${LIST_END}`, 'i'),
+  new RegExp(String.raw`\bmust\s+(?:be\s+(?:based|located|residing|living)\s+in|be\s+in|reside\s+in|live\s+in|be\s+from)\s+(?:the\s+)?(${LIST})${LIST_END}`, 'i'),
+];
+
+function restriction(text, allowedLocations) {
+  return { locationScope: 'restricted', locationRestriction: cleanText(text), allowedLocations };
 }
 
 export function extractLocationRequirement(text) {
   const compact = cleanText(text);
   const citizenship = compact.match(/\b(?:[A-Z.]+\s+)?citizens?\s+only\b|\bmust\s+be\s+(?:a\s+)?(?:[A-Z.]+\s+)?citizen\b/i);
   if (citizenship) return { locationScope: 'unknown', locationRestriction: 'Citizenship requirement needs manual verification', allowedLocations: [] };
-  // Explicit body/title restrictions override a generic Worldwide location label.
-  const country = '(?:U\\.S\\.A?\\.?|USA?|United States(?: of America)?|Canada|United Kingdom|UK|U\\.K\\.?)';
-  const hardPatterns = [
-    new RegExp(`\\b(${country})[ -]+(?:residents?|freelancers?|applicants?|candidates?)\\s+only\\b`, 'i'),
-    new RegExp(`\\b(${country})[ -]+only\\b`, 'i'),
-    new RegExp(`\\bonly\\s+(?:accepting\\s+)?(?:freelancers?|applicants?|candidates?)\\s+(?:based|located|residing)\\s+in\\s+(?:the\\s+)?(${country})(?=[\\s.;!)]|$)(?!\\s+(?:or|and)\\b)`, 'i'),
-    new RegExp(`\\bmust\\s+(?:be|reside|live)\\s+(?:(?:based|located)\\s+)?in\\s+(?:the\\s+)?(${country})(?=[\\s.;!)]|$)(?!\\s+(?:or|and)\\b)`, 'i'),
-  ];
-  for (const pattern of hardPatterns) {
+  for (const pattern of HARD_PATTERNS) {
     const match = compact.match(pattern);
-    if (match) return {
-      locationScope: 'restricted',
-      locationRestriction: match[0],
-      allowedLocations: [canonicalLocation(match[1])],
-    };
+    if (!match) continue;
+    const locations = findLocations(match[1]);
+    if (locations.length && locations.every(Boolean)) return restriction(match[0], [...new Set(locations.map((item) => item.name))]);
   }
-  const restricted = compact.match(/Only freelancers located in\s+(.+?)\s+may apply\.?/i);
-  if (restricted) {
-    const locations = restricted[1].split(/\s*(?:,|\bor\b|\band\b)\s*/i).map(canonicalLocation).filter(Boolean);
-    return {
-      locationScope: 'restricted',
-      locationRestriction: cleanText(restricted[0]),
-      allowedLocations: locations,
-    };
+  const label = compact.match(/Only freelancers located in\s+(.+?)\s+may apply\.?/i);
+  if (label) {
+    const known = findLocations(label[1]).filter(Boolean).map((item) => item.name);
+    // Keep unrecognized entries so eligibility stays unknown rather than blocked.
+    const unrecognized = label[1]
+      .replace(new RegExp(LOCATION_SOURCE, 'gi'), ' ')
+      .split(/\s*(?:,|\/|&|\bor\b|\band\b)\s*/i)
+      .map((item) => cleanText(item).replace(/^the\s+/i, '').replace(/[.]+$/, ''))
+      .filter((item) => /[a-z]/i.test(item));
+    return restriction(label[0], [...new Set([...known, ...unrecognized])]);
   }
   if (/\bWorldwide\b/i.test(compact)) {
     return {
@@ -70,9 +66,20 @@ export function extractLocationRequirement(text) {
 export function evaluateLocationEligibility(requirement, freelancerCountry) {
   if (requirement.locationScope === 'worldwide') return true;
   if (requirement.locationScope !== 'restricted' || !requirement.allowedLocations?.length) return null;
-  const country = canonicalLocation(freelancerCountry);
-  if (!country) return null;
-  return requirement.allowedLocations.some((location) => canonicalLocation(location).toLowerCase() === country.toLowerCase());
+  const home = resolveLocation(canonicalLocation(freelancerCountry || ''));
+  if (home?.kind !== 'country') return null;
+  let uncertain = false;
+  for (const location of requirement.allowedLocations) {
+    const allowed = resolveLocation(canonicalLocation(location));
+    if (!allowed) uncertain = true;
+    else if (allowed.kind === 'country' && allowed.code === home.code) return true;
+    else if (allowed.kind === 'region') {
+      const region = REGIONS[allowed.name];
+      if (region.members.includes(home.code)) return true;
+      if (region.ambiguous?.includes(home.code)) uncertain = true;
+    }
+  }
+  return uncertain ? null : false;
 }
 
 export function locationEligibility(text, freelancerCountry, inspectedAt = new Date().toISOString()) {

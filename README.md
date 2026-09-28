@@ -4,7 +4,7 @@ Find relevant work. Keep a history of what you have seen. Write proposals from y
 
 Built for the [Early AI-dopters](https://www.skool.com/earlyaidopters) community, this CLI brings Upwork search, lane-based ranking, SQLite history, and proposal preparation into one terminal workflow. A dedicated Chrome profile handles your signed-in session. Your evidence profile supplies your experience and voice.
 
-**Private community development.** Repository access is restricted to invited collaborators. npm publishing is disabled by default. Offline tests and a clean package installation are verified. Browser automation depends on Upwork’s current pages and can stop when those pages change. Filling and submitting proposals through the browser is off by default; see [Live proposal automation](#live-proposal-automation-opt-in).
+**Open source, MIT licensed, and not affiliated with Upwork.** Everything runs on your machine against your own signed-in account. Offline tests and a clean package installation are verified on every change. Browser automation depends on Upwork’s current pages and can stop when those pages change; fixes are welcome as pull requests. Filling and submitting proposals through the browser is off by default; see [Live proposal automation](#live-proposal-automation-opt-in).
 
 [Get started](#get-started) · [Pick your lanes](#pick-your-lanes) · [Find work](#find-work) · [Write like yourself](#write-like-yourself) · [Proposal workflow](#proposal-workflow) · [Troubleshooting](#troubleshooting)
 
@@ -29,7 +29,7 @@ The CLI does not generate prose by calling an AI model. Use the packet with your
 
 You need Node.js **22.5 or later**, npm, Google Chrome, and an Upwork freelancer account. Chrome discovery includes macOS, Windows, and Linux paths; live behavior must be checked on your platform. The CLI uses Node’s built-in SQLite, which may print an experimental-feature warning on older supported Node versions.
 
-With repository access and GitHub authentication configured, clone and install locally:
+Clone and install:
 
 ```bash
 git clone https://github.com/earlyaidopters/upwork-cli.git
@@ -260,8 +260,6 @@ For manual takeover, run `proposal handoff application.json` first. Use `proposa
 Chrome stores its own session material. Keep the state directory private. Application exports and packets can contain your writing, client details, and rates. They are not safe to publish by default.
 
 Use `UPWORK_CLI_HOME` for an isolated state directory. Additional overrides are `UPWORK_CLI_CONFIG`, `UPWORK_CLI_PROFILE`, `UPWORK_CLI_CHROME`, `UPWORK_CLI_PORT`, and `UPWORK_CLI_CDP_TIMEOUT_MS`. Set a distinct browser port as well when running separate sessions.
-
-The optional `trace` diagnostic excludes headers, cookies, request variables, and response bodies and redacts search-query parameters. It can still contain URL paths and the query supplied in trace metadata. Review diagnostic files before sharing them.
 
 ## Troubleshooting
 

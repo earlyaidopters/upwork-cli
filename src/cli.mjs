@@ -29,7 +29,6 @@ import {
   validateApplication,
   verifyFilledApplicationForm,
 } from './application.mjs';
-import { startSanitizedTrace, saveTrace } from './network.mjs';
 import { outputJobs, readJsonFile } from './output.mjs';
 import { selectPullOutput } from './delta.mjs';
 import { initializeProfile, loadProfile, profilePath } from './profile.mjs';
@@ -82,7 +81,7 @@ const program = new Command();
 program
   .name('upwork-cli')
   .description('Find Upwork work in your lanes, keep local history, and prepare proposals from your own evidence.')
-  .version('0.13.0');
+  .version('0.14.0');
 
 const LIVE_AUTOMATION_NOTICE = [
   'Live proposal filling and submission are off. They are opt-in because Upwork’s Terms of Use (section 3.5)',
@@ -616,39 +615,6 @@ addOutputOptions(program.command('hunt [preset]')
       }, page);
     });
   }));
-
-program.command('trace')
-  .description('Capture a credential-free endpoint/GraphQL operation map while exercising a feed or search.')
-  .addOption(new Option('--mode <mode>', 'feed or search').choices(['feed', 'search']).default('feed'))
-  .option('--feed <feed>', 'best, recent, or mine', 'best')
-  .option('--query <query>', 'search query', 'ai trainer')
-  .option('--batches <number>', 'feed load-more clicks', '2')
-  .option('--pages <number>', 'search pages', '2')
-  .option('-o, --output <file>', 'trace output file', './upwork-network-trace.json')
-  .action(async (options) => {
-    const config = await loadConfig();
-    await withBrowser(config, 'https://www.upwork.com/nx/find-work/best-matches', async ({ page }) => {
-      await requireUsablePage(page);
-      const trace = startSanitizedTrace(page);
-      if (options.mode === 'search') {
-        await collectSearch(page, options.query, {
-          pages: clamp(options.pages, 1, config.search.maxPages),
-          perPage: config.search.perPage,
-          sort: 'recent',
-          delayMs: config.search.delayMs,
-        });
-      } else {
-        await collectFeed(page, options.feed, {
-          batches: clamp(options.batches, 0, config.search.maxFeedBatches),
-          delayMs: config.search.delayMs,
-        });
-      }
-      const entries = trace.stop();
-      const output = path.resolve(options.output);
-      await saveTrace(output, entries, { mode: options.mode, feed: options.feed, query: options.query });
-      console.log(`Wrote ${entries.length} sanitized request signatures to ${output}`);
-    });
-  });
 
 const proposalCommand = program.command('proposal')
   .description('Prepare and audit proposals. Submission requires exact-content review and explicit user consent.');

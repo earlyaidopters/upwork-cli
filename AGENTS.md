@@ -1,10 +1,10 @@
 # Community CLI development
 
-## Private by default
+## Public repository
 
-Keep this repository private. Do not change repository visibility, publish to npm, create public mirrors, deploy public documentation, or distribute release assets publicly without the owner's explicit approval for that action. A request to improve the community version is not permission to make it public.
+This repository is public. Everything committed here is world-visible, so never commit personal data, real job exports, proposal drafts, profiles, browser sessions, or local databases. Use synthetic fixtures only.
 
-Keep `private: true` in package.json. Local npm packing and installation are allowed. Use draft releases when preparing future releases unless publication is explicitly requested.
+Keep `private: true` in package.json so npm publication stays a deliberate owner decision. Do not publish to npm, cut public releases, or change repository settings without the owner's explicit approval for that action.
 
 ## Community usability
 

@@ -8,6 +8,10 @@ Describe the concrete behavior that changes, why it matters, and how you verifie
 
 Release checks must cover offline tests, a clean isolated installation, the npm archive contents, privacy scanning, documentation links, and command examples. Live browser claims need separately documented live evidence. Do not represent unit tests as live submission verification.
 
-## Private release policy
+## Lanes
 
-The repository stays private and package.json sets `private: true` to block npm publication. This does not prevent local packing or installation. Prepare future GitHub releases as drafts. Changing visibility, publishing to npm, or distributing files publicly requires explicit owner approval. Tests and CI do not grant that approval.
+Lane changes live in `src/lanes.mjs`. Add a test in `test/lanes.test.mjs` with one realistic job title that should rank as a strong fit and one nearby title that should not. Terms match whole words; end a term with `*` for a prefix match.
+
+## Release policy
+
+package.json keeps `private: true`, so npm publication is a deliberate maintainer decision rather than an accident. Local packing and installation still work. Do not submit live proposals, or use another person's account, to test a change.
