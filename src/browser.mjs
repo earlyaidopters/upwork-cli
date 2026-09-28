@@ -254,7 +254,7 @@ export async function inspectPageState(page) {
       'textarea[name="g-recaptcha-response"]',
       '[data-hcaptcha-widget-id]',
     ].join(','))),
-    page.locator('[data-test="JobTile"]').count().catch(() => 0),
+    page.locator('[data-test~="JobTile"]').count().catch(() => 0),
     page.locator('section[data-ev-opening_uid]').count().catch(() => 0),
   ]);
   return classifyPageStateSignals({

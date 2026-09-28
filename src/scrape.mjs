@@ -83,23 +83,23 @@ export async function extractFeedJobs(page, metadata = {}) {
         featured: card.getAttribute('data-ev-featured') === 'true',
         title: link?.textContent || '',
         url: link?.getAttribute('href') || '',
-        posted: text(card, '[data-test="posted-on"]'),
-        proposals: text(card, '[data-test="proposals-tier"]'),
-        description: text(card, '[data-test="job-description-text"]')
-          || text(card, '[data-test="job-description-line-clamp"]'),
-        skills: texts(card, 'a[data-test="attr-item"]'),
+        posted: text(card, '[data-test~="posted-on"]'),
+        proposals: text(card, '[data-test~="proposals-tier"]'),
+        description: text(card, '[data-test~="job-description-text"]')
+          || text(card, '[data-test~="job-description-line-clamp"]'),
+        skills: texts(card, 'a[data-test~="attr-item"]'),
         jobType: [
-          text(card, '[data-test="job-type"]'),
-          text(card, '[data-test="hourly-rate"]'),
-          text(card, '[data-test="budget"]'),
+          text(card, '[data-test~="job-type"]'),
+          text(card, '[data-test~="hourly-rate"]'),
+          text(card, '[data-test~="budget"]'),
         ].filter(Boolean).join(' '),
-        budget: text(card, '[data-test="budget"]'),
-        experienceLevel: text(card, '[data-test="contractor-tier"]'),
-        duration: text(card, '[data-test="duration"]'),
-        payment: text(card, '[data-test="payment-verification-status"]'),
-        clientRating: text(card, '[data-test="js-feedback"]'),
-        clientSpend: text(card, '[data-test="client-spendings"]'),
-        clientCountry: text(card, '[data-test="client-country"]'),
+        budget: text(card, '[data-test~="budget"]'),
+        experienceLevel: text(card, '[data-test~="contractor-tier"]'),
+        duration: text(card, '[data-test~="duration"]'),
+        payment: text(card, '[data-test~="payment-verification-status"]'),
+        clientRating: text(card, '[data-test~="js-feedback"]'),
+        clientSpend: text(card, '[data-test~="client-spendings"]'),
+        clientCountry: text(card, '[data-test~="client-country"]'),
         fullText: card.textContent || '',
       };
     });
@@ -107,37 +107,81 @@ export async function extractFeedJobs(page, metadata = {}) {
   return rows.map((row) => normalizeRawJob(row, metadata));
 }
 
-export async function extractSearchJobs(page, metadata = {}) {
-  const rows = await page.locator('[data-test="JobTile"]').evaluateAll((cards) => {
-    const text = (root, selector) => root.querySelector(selector)?.textContent?.trim() || '';
-    const texts = (root, selector) => [...root.querySelectorAll(selector)]
-      .map((element) => element.textContent?.trim() || '')
-      .filter(Boolean);
-    return cards.map((card) => {
-      const link = card.querySelector('[data-test="job-tile-title-link UpLink"]');
-      const header = text(card, '[data-test="job-pubilshed-date"]');
-      return {
-        uid: card.getAttribute('data-test-key') || card.getAttribute('data-ev-job-uid'),
-        position: card.getAttribute('data-ev-position'),
-        featured: /featured/i.test(text(card, '[data-test="badges JobTileBadges"]')),
-        title: link?.textContent || '',
-        url: link?.getAttribute('href') || '',
-        posted: header.split(/[·•]/)[0] || '',
-        proposals: text(card, '[data-test="proposals-tier"]'),
-        description: text(card, '[data-test="UpCLineClamp JobDescription"]'),
-        skills: texts(card, '[data-test="token"]'),
-        jobType: text(card, '[data-test="job-type-label"]'),
-        experienceLevel: text(card, '[data-test="experience-level"]'),
-        duration: text(card, '[data-test="duration-label"]'),
-        payment: text(card, '[data-test="payment-verified"]'),
-        clientRating: text(card, '[data-test="total-feedback"]'),
-        clientSpend: text(card, '[data-test="total-spent"]'),
-        clientCountry: text(card, '[data-test="location"]'),
-        fullText: card.textContent || '',
-      };
-    });
+// Upwork's data-test values now carry extra tokens ("job-pubilshed-date UpCBadge",
+// "job-tile-title-link UpCLink"), so every lookup matches one token with ~=.
+export const SEARCH_CARD_SELECTOR = '[data-test~="JobTile"]';
+export const SEARCH_CARD_FIELDS = {
+  title: '[data-test~="job-tile-title-link"]',
+  posted: '[data-test~="job-pubilshed-date"], [data-test~="job-published-date"]',
+  header: '[data-test~="JobTile15in24Header"], [data-test~="JobTileHeader"]',
+  proposals: '[data-test~="proposals-tier"]',
+  description: '[data-test~="JobDescription"]',
+  jobType: '[data-test~="job-type-label"]',
+  budget: '[data-test~="is-fixed-price"]',
+  experienceLevel: '[data-test~="experience-level"]',
+  duration: '[data-test~="duration-label"]',
+  payment: '[data-test~="payment-verified"]',
+  clientRating: '[data-test~="total-feedback"]',
+  clientSpend: '[data-test~="total-spent"]',
+  clientCountry: '[data-test~="location"]',
+  badges: '[data-test~="JobTileBadges"]',
+  skills: '[data-test~="token"]',
+};
+
+// Runs inside the page, so it must stay self-contained. It only collects text;
+// interpretation happens in searchCardToRaw, which tests can exercise directly.
+export function readSearchCards(cards, fields) {
+  const clean = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  return cards.map((card) => {
+    const link = card.querySelector(fields.title)
+      || card.querySelector('h2 a[href*="/jobs/"], h3 a[href*="/jobs/"], a[href*="/jobs/"][href*="~0"]');
+    const row = {
+      uid: card.getAttribute('data-ev-job-uid') || card.getAttribute('data-ev-opening_uid') || card.getAttribute('data-test-key'),
+      position: card.getAttribute('data-ev-position'),
+      title: clean(link?.textContent),
+      url: link?.getAttribute('href') || '',
+      skills: [...card.querySelectorAll(fields.skills)].map((element) => clean(element.textContent)).filter(Boolean),
+      fullText: clean(card.textContent),
+    };
+    for (const [key, selector] of Object.entries(fields)) {
+      if (key === 'title' || key === 'skills') continue;
+      row[key] = clean(card.querySelector(selector)?.textContent);
+    }
+    return row;
   });
-  return rows.map((row) => normalizeRawJob(row, metadata));
+}
+
+export function searchCardToRaw(row) {
+  const header = row.posted || row.header || '';
+  return {
+    ...row,
+    posted: (header.split(/[·•]/)[0] || '').trim(),
+    proposals: row.proposals || header.match(/Proposals:\s*([^·•]+)/i)?.[1] || '',
+    featured: /featured/i.test(row.badges || ''),
+    clientRating: /no feedback/i.test(row.clientRating || '') ? '' : row.clientRating,
+  };
+}
+
+const HEALTH_FIELDS = [
+  ['title', (job) => job.title],
+  ['posted time', (job) => job.posted],
+  ['proposal count', (job) => job.proposals],
+  ['job type', (job) => job.jobType],
+  ['client details', (job) => job.clientSpendLabel || job.clientCountry],
+];
+
+// A silent markup change once blanked titles for eleven days. Flag it on the first pull instead.
+export function parserWarnings(jobs, { minimumCards = 5, threshold = 0.5 } = {}) {
+  if (jobs.length < minimumCards) return [];
+  return HEALTH_FIELDS
+    .map(([name, read]) => ({ name, missing: jobs.filter((job) => !read(job)).length }))
+    .filter(({ missing }) => missing / jobs.length > threshold)
+    .map(({ name, missing }) => `${name} missing on ${missing}/${jobs.length} cards`);
+}
+
+export async function extractSearchJobs(page, metadata = {}) {
+  const rows = await page.locator(SEARCH_CARD_SELECTOR).evaluateAll(readSearchCards, SEARCH_CARD_FIELDS);
+  return rows.map((row) => normalizeRawJob(searchCardToRaw(row), metadata));
 }
 
 export function buildSearchUrl(query, options = {}) {
@@ -155,14 +199,14 @@ export function buildSearchUrl(query, options = {}) {
 
 async function waitForSearch(page) {
   await Promise.race([
-    page.locator('[data-test="JobTile"]').first().waitFor({ state: 'attached', timeout: 20_000 }),
+    page.locator(SEARCH_CARD_SELECTOR).first().waitFor({ state: 'attached', timeout: 20_000 }),
     page.getByText(/no jobs found|there are no results/i).first().waitFor({ state: 'visible', timeout: 20_000 }),
   ]).catch(() => {});
   await requireUsablePage(page);
   await page.waitForFunction(
-    () => document.querySelectorAll('[data-test="JobTile"]').length > 0
-      && document.querySelectorAll('[data-test="JobsList"] .air3-skeleton-shape').length === 0,
-    null,
+    (selector) => document.querySelectorAll(selector).length > 0
+      && document.querySelectorAll('[data-test~="JobsList"] .air3-skeleton-shape').length === 0,
+    SEARCH_CARD_SELECTOR,
     { timeout: 12_000 },
   ).catch(() => {});
 }
@@ -175,6 +219,7 @@ export async function collectSearch(page, query, options = {}) {
   await waitForSearch(page);
 
   const all = [];
+  const warnings = new Set();
   for (let pageNumber = 1; pageNumber <= pages; pageNumber += 1) {
     const current = await extractSearchJobs(page, {
       source: 'search',
@@ -182,6 +227,7 @@ export async function collectSearch(page, query, options = {}) {
       page: pageNumber,
     });
     all.push(...current);
+    for (const warning of parserWarnings(current)) warnings.add(warning);
     if (pageNumber >= pages) break;
 
     const next = page.getByRole('link', { name: 'Next page', exact: true });
@@ -190,12 +236,21 @@ export async function collectSearch(page, query, options = {}) {
     await next.click();
     await page.waitForURL(/(?:[?&])page=\d+/, { timeout: 20_000 }).catch(() => {});
     await page.waitForFunction(
-      (uid) => document.querySelector('[data-test="JobTile"]')?.getAttribute('data-test-key') !== uid,
-      previousFirstUid,
+      ([selector, uid]) => {
+        const card = document.querySelector(selector);
+        return (card?.getAttribute('data-ev-job-uid') || card?.getAttribute('data-test-key')) !== uid;
+      },
+      [SEARCH_CARD_SELECTOR, previousFirstUid],
       { timeout: 20_000 },
     ).catch(() => {});
     await sleep(Number(options.delayMs || 650));
     await requireUsablePage(page);
+  }
+  if (warnings.size) {
+    process.stderr.write(
+      `Warning: Upwork's search page may have changed for "${query}": ${[...warnings].join('; ')}. `
+      + 'Rankings will be unreliable until the parser is updated. Please report it at https://github.com/earlyaidopters/upwork-cli/issues\n',
+    );
   }
   return uniqueBy(all, 'uid');
 }
