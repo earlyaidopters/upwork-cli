@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { stateDirectory, writeAtomic } from './util.mjs';
+import { envSetting, stateDirectory, writeAtomic } from './util.mjs';
 
 import { object, numeric, stringList } from './validation.mjs';
 
@@ -59,8 +59,9 @@ export const DEFAULT_PROFILE = {
 };
 
 export function profilePath() {
-  return process.env.UPWORK_JOBS_PROFILE
-    ? path.resolve(process.env.UPWORK_JOBS_PROFILE)
+  const override = envSetting('PROFILE');
+  return override
+    ? path.resolve(override)
     : path.join(stateDirectory(), 'profile.json');
 }
 

@@ -38,7 +38,7 @@ function job(uid, title, extras = {}) {
 test('migrates the legacy JSON cache into SQLite without deleting it', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-migrate-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
   await fs.mkdir(path.dirname(legacyDatabasePath()), { recursive: true });
   await fs.writeFile(legacyDatabasePath(), JSON.stringify({
     version: 1,
@@ -59,7 +59,7 @@ test('migrates the legacy JSON cache into SQLite without deleting it', async (t)
 test('records canonical jobs, per-query sightings, runs, and net-new deltas', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-runs-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
 
   const first = await recordPull([job('1', 'Claude Code Trainer'), job('2', 'AI Adoption Partner')], {
     command: 'hunt ai-trainers',
@@ -99,7 +99,7 @@ test('records canonical jobs, per-query sightings, runs, and net-new deltas', as
 test('persists inspected location eligibility across search-card refreshes', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-eligibility-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
 
   await recordPull([job('restricted', 'U.S.-Only Claude Consultant', {
     locationScope: 'restricted',
@@ -126,7 +126,7 @@ test('persists inspected location eligibility across search-card refreshes', asy
 test('canonicalizes stored job URLs independently of malformed search slugs', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-url-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
 
   await recordPull([job('1111111111111111104', 'AI Agent Developer – Claude / Microsoft Copilot', {
     url: 'https://www.upwork.com/jobs/span-class-highlight-span-Agent_~021111111111111111104/',
@@ -143,7 +143,7 @@ test('canonicalizes stored job URLs independently of malformed search slugs', as
 test('indexed cache reads return only requested jobs across batches', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-indexed-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
   await recordPull(Array.from({length: 600}, (_, i) => job(String(i), `Synthetic ${i}`)));
   const requested = Array.from({length: 550}, (_, i) => String(i));
   const selected = await loadJobsByIds([...requested, '1', 'missing']);
@@ -155,7 +155,7 @@ test('indexed cache reads return only requested jobs across batches', async (t) 
 test('fresh unknown eligibility clears an older confirmed result', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-fresh-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
   await recordPull([job('1', 'Example', {locationScope:'restricted', allowedLocations:['Canada'], eligibleForProfile:true, detailInspectedAt:'2026-09-10T01:00:00Z'})]);
   await recordPull([job('1', 'Example', {locationScope:'unknown', allowedLocations:[], locationRestriction:null, eligibleForProfile:null, detailInspectedAt:'2026-09-10T02:00:00Z'})]);
   const stored = await findJob('1');
@@ -167,7 +167,7 @@ test('fresh unknown eligibility clears an older confirmed result', async (t) => 
 test('search refresh preserves structured locations for country re-evaluation', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-locations-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
   await recordPull([job('1', 'Example', {locationScope:'restricted', allowedLocations:['Canada'], eligibleForProfile:true, detailInspectedAt:'2026-09-10T01:00:00Z'})]);
   await recordPull([job('1', 'Example')]);
   assert.deepEqual((await findJob('1')).allowedLocations, ['Canada']);
@@ -177,7 +177,7 @@ test('search refresh preserves structured locations for country re-evaluation', 
 test('job lookup never selects a different job through a partial ID or SQL wildcard', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-store-exact-'));
   t.after(async () => fs.rm(root, { recursive: true, force: true }));
-  process.env.UPWORK_JOBS_HOME = root;
+  process.env.UPWORK_CLI_HOME = root;
   await recordPull([job('100', 'Synthetic A'), job('1000', 'Synthetic B')]);
   assert.equal(await findJob('10'), null);
   assert.equal(await findJob('%'), null);

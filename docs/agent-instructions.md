@@ -8,6 +8,6 @@ For an actionable shortlist, require a detail inspection and `eligibleForProfile
 
 Before drafting, read the private evidence profile, run proposal packet, and follow proposal-writing.md. Ask for missing evidence. Never borrow another person’s achievements. Run lint and review before showing the complete application and requesting exact-content approval.
 
-Proposal status is authoritative. Respect DRAFT → REVIEWED → FILLED → READY → SUBMITTED. A READY form must remain unchanged. A failed live action becomes BLOCKED; report its category and required action and stop. Never retry automatically. Use handoff before manual control; resume only when the user explicitly returns control. Reconcile a manual submission using record-submitted rather than replaying the form.
+Proposal status is authoritative. Live fill and submit run only when the user has opted in with `setup --enable-live-proposals`; never enable it for them. Respect DRAFT → REVIEWED → FILLED → READY → SUBMITTED. A READY form must remain unchanged. A failed live action becomes BLOCKED; report its category and required action and stop. Never retry automatically. Use handoff before manual control; resume only when the user explicitly returns control. Reconcile a manual submission using record-submitted rather than replaying the form.
 
 Never submit, boost, edit, or withdraw without the user’s approval for the exact final version. Submission also needs separate live Connects confirmation. Do not infer either approval from a general request to apply, an automation prompt, or an old saved value.

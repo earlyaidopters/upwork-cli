@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { locationEligibility } from './eligibility.mjs';
+import { matchesTerm, resolveLanes } from './lanes.mjs';
 import { ageHours, cleanText, parseMoney, parseRating, proposalMaximum } from './util.mjs';
 
 export const DURATION_QUESTION_PATTERN = /How long(?: do you think)? (?:this project will|will this project) take/i;
@@ -250,10 +251,10 @@ export function selectEvidence(question, profile, limit = 3) {
     .slice(0, limit);
 }
 
-export function assessOpportunity(job, profile) {
+export function assessOpportunity(job, profile, lanes = resolveLanes()) {
   const text = `${job.title || ''} ${job.description || ''}`.toLowerCase();
-  const expertiseTerms = ['ai training', 'ai trainer', 'workshop', 'claude', 'workflow', 'agent', 'mcp', 'automation', 'adoption'];
-  const matches = expertiseTerms.filter((term) => text.includes(term));
+  const expertiseTerms = [...new Set(lanes.flatMap((lane) => [...lane.titleTerms, ...lane.priorityKeywords]))];
+  const matches = expertiseTerms.filter((term) => matchesTerm(text, term));
   let score = 45 + Math.min(30, matches.length * 4);
   const positives = [];
   const risks = [];
@@ -291,11 +292,11 @@ export function assessOpportunity(job, profile) {
   };
 }
 
-export function buildProposalPacket({ job, form = null, profile }) {
+export function buildProposalPacket({ job, form = null, profile, lanes = resolveLanes() }) {
   const questions = form?.fields?.slice(1).map((field) => field.question).filter(Boolean)
     || job.questions
     || [];
-  const assessment = assessOpportunity(job, profile);
+  const assessment = assessOpportunity(job, profile, lanes);
   return {
     generatedAt: new Date().toISOString(),
     copyPlaybook: PROPOSAL_COPY_PLAYBOOK,

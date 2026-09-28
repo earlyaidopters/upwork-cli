@@ -1,10 +1,10 @@
 {
-  "name": "upwork-job-cli",
-  "version": "0.12.0",
-  "description": "Local Upwork discovery, job history, and evidence-grounded proposal preparation for independent professionals.",
+  "name": "upwork-cli",
+  "version": "0.13.0",
+  "description": "Find Upwork work in your lanes, keep local job history, and prepare evidence-grounded proposals.",
   "type": "module",
   "bin": {
-    "upwork-jobs": "./src/cli.mjs"
+    "upwork-cli": "./src/cli.mjs"
   },
   "scripts": {
     "test": "node --test",
@@ -34,11 +34,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/promptadvisers/upwork-jobs.git"
+    "url": "https://github.com/earlyaidopters/upwork-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/promptadvisers/upwork-jobs/issues"
+    "url": "https://github.com/earlyaidopters/upwork-cli/issues"
   },
-  "homepage": "https://github.com/promptadvisers/upwork-jobs#readme",
+  "homepage": "https://github.com/earlyaidopters/upwork-cli#readme",
   "private": true
 }

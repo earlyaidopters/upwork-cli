@@ -1,13 +1,21 @@
+import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 export const UPWORK_ORIGIN = 'https://www.upwork.com';
 
+// UPWORK_CLI_* settings win; UPWORK_JOBS_* names from earlier releases still work.
+export function envSetting(name, env = process.env) {
+  return env[`UPWORK_CLI_${name}`] || env[`UPWORK_JOBS_${name}`] || '';
+}
+
 export function stateDirectory() {
-  return path.resolve(
-    process.env.UPWORK_JOBS_HOME || path.join(os.homedir(), '.upwork-jobs'),
-  );
+  const override = envSetting('HOME');
+  if (override) return path.resolve(override);
+  const current = path.join(os.homedir(), '.upwork-cli');
+  const legacy = path.join(os.homedir(), '.upwork-jobs');
+  return !existsSync(current) && existsSync(legacy) ? legacy : current;
 }
 
 export async function ensureDirectory(directory) {

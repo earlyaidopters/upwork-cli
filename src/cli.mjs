@@ -75,13 +75,34 @@ import { clamp, parseList, proposalMaximum, sleep, stateDirectory, uniqueBy, wri
 import { validateCommandOptions } from './validation.mjs';
 import { hydrateEligibility } from './eligibility.mjs';
 import { configureMember } from './setup.mjs';
+import { laneCatalog, lanePresets, resolveLanes } from './lanes.mjs';
 
 const program = new Command();
 
 program
-  .name('upwork-jobs')
-  .description('Local Upwork job search, ranking, proposal preparation, and sanitized network tracing.')
-  .version('0.12.0');
+  .name('upwork-cli')
+  .description('Find Upwork work in your lanes, keep local history, and prepare proposals from your own evidence.')
+  .version('0.13.0');
+
+const LIVE_AUTOMATION_NOTICE = [
+  'Live proposal filling and submission are off. They are opt-in because Upwork’s Terms of Use (section 3.5)',
+  'prohibit unapproved automation, and Upwork can warn, restrict, or permanently block accounts that use it.',
+  '',
+  'Without it: run proposal review, paste each block into Upwork yourself, then run proposal record-submitted.',
+  'To accept that risk for your own account: upwork-cli setup --enable-live-proposals',
+].join('\n');
+
+function requireLiveAutomation(config) {
+  if (config.proposals?.liveAutomation !== true) throw new Error(LIVE_AUTOMATION_NOTICE);
+}
+
+function formatLaneList(config) {
+  const selected = new Set(config.lanes || []);
+  return Object.entries(laneCatalog(config)).map(([id, lane], index) => {
+    const mark = selected.has(id) ? '●' : '○';
+    return `${mark} ${index + 1}. ${id.padEnd(15)} ${lane.label.padEnd(27)} ${lane.description || ''}`.trimEnd();
+  }).join('\n');
+}
 
 function addOutputOptions(command) {
   return command
@@ -228,25 +249,66 @@ program.command('init')
   });
 
 program.command('setup')
-  .description('Configure your private country and hourly rate; preserve existing evidence and preferences.')
+  .description('Configure your country, rate, and lanes; preserve existing evidence and preferences.')
   .option('--country <country>', 'your actual country of residence')
   .option('--rate <number>', 'your default hourly proposal rate')
+  .option('--lanes <lanes>', 'comma-separated lane ids or numbers from `upwork-cli lanes`')
+  .option('--enable-live-proposals', 'allow proposal fill and submit to drive the browser (against Upwork’s automation rules)')
+  .option('--disable-live-proposals', 'turn live proposal filling and submission back off')
   .action(async (options) => {
-    if (options.country === undefined && options.rate === undefined) {
-      if (!process.stdin.isTTY) throw new Error('Interactive setup requires a terminal. Use setup --country "Your country" --rate 100, or init for empty defaults.');
+    if (options.enableLiveProposals && options.disableLiveProposals) {
+      throw new Error('Choose either --enable-live-proposals or --disable-live-proposals.');
+    }
+    const settings = {
+      country: options.country,
+      rate: options.rate,
+      lanes: options.lanes,
+      liveAutomation: options.enableLiveProposals ? true : options.disableLiveProposals ? false : undefined,
+    };
+    if (Object.values(settings).every((value) => value === undefined)) {
+      if (!process.stdin.isTTY) throw new Error('Interactive setup requires a terminal. Use setup --country "Your country" --rate 100 --lanes ai-automation, or init for empty defaults.');
+      const config = await loadConfig();
       const prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
       try {
         console.log('Configure your private profile. Press Enter to keep an existing value or leave it unset.');
         const country = (await prompt.question('Country of residence: ')).trim();
         const rate = (await prompt.question('Default hourly proposal rate (USD): ')).trim();
-        if (country) options.country = country;
-        if (rate) options.rate = rate;
+        console.log(`\nLanes decide which searches run and how jobs are ranked.\n${formatLaneList(config)}\n`);
+        const lanes = (await prompt.question('Your lanes (numbers or ids, comma-separated): ')).trim();
+        if (country) settings.country = country;
+        if (rate) settings.rate = rate;
+        if (lanes) settings.lanes = lanes;
       } finally {
         prompt.close();
       }
     }
-    const result = await configureMember(options);
-    console.log(`Private settings saved.\nConfig: ${result.configPath}\nEvidence profile: ${result.profilePath}\n\nNext: run upwork-jobs auth, then upwork-jobs doctor.\nBefore drafting, add your own evidence using docs/voice-workbook.md.`);
+    if (settings.liveAutomation === true) process.stderr.write(`${LIVE_AUTOMATION_NOTICE.split('\n\n')[0]}\nYou enabled it for this installation.\n\n`);
+    const result = await configureMember(settings);
+    console.log([
+      'Private settings saved.',
+      `Config: ${result.configPath}`,
+      `Evidence profile: ${result.profilePath}`,
+      `Lanes: ${result.lanes.length ? result.lanes.join(', ') : 'all (pick yours with setup --lanes)'}`,
+      `Live proposal automation: ${result.liveAutomation ? 'ON' : 'off'}`,
+      '',
+      'Next: run upwork-cli auth, then upwork-cli doctor.',
+      'Before drafting, add your own evidence using docs/voice-workbook.md.',
+    ].join('\n'));
+  });
+
+program.command('lanes')
+  .description('List the kinds of work you can target. ● marks your selected lanes.')
+  .option('--queries', 'also print each lane’s search queries')
+  .action(async (options) => {
+    const config = await loadConfig();
+    console.log(formatLaneList(config));
+    if (options.queries) {
+      for (const lane of resolveLanes({ ...config, lanes: Object.keys(laneCatalog(config)) })) {
+        console.log(`\n${lane.id}\n  ${lane.queries.join('\n  ')}`);
+      }
+    }
+    if (!config.lanes.length) console.log('\nNo lanes selected, so every lane competes. Pick yours: upwork-cli setup --lanes 1,2');
+    console.log('\nAdd your own under customLanes in the config file. See README, "Lanes".');
   });
 
 async function proposalContext(config, input, { includeForm = true } = {}) {
@@ -519,18 +581,19 @@ addOutputOptions(program.command('feed [feed]')
   }));
 
 addOutputOptions(program.command('hunt [preset]')
-  .description('Run a multi-query preset, deduplicate jobs, and rank the combined result.')
+  .description('Search every query in a lane or preset, deduplicate, and rank. Defaults to all your lanes.')
   .option('-p, --pages <number>', 'pages per query', '1')
   .option('--queries <queries>', 'override preset queries with a comma-separated list')
   .addOption(new Option('--sort <sort>', 'best or recent').choices(['best', 'recent']).default('recent'))
-  .action(async (preset = 'ai-trainers', options) => {
+  .action(async (preset = 'lanes', options) => {
     const startedAt = new Date().toISOString();
     const config = await loadConfig();
+    const presets = lanePresets(config);
     const queries = parseList(options.queries).length
       ? parseList(options.queries)
-      : config.presets[preset]?.queries;
+      : presets[preset]?.queries;
     if (!queries?.length) {
-      throw new Error(`Unknown preset "${preset}". Available: ${Object.keys(config.presets).join(', ')}`);
+      throw new Error(`Unknown lane or preset "${preset}". Available: ${Object.keys(presets).join(', ')}`);
     }
     const pages = clamp(options.pages, 1, config.search.maxPages);
     await withBrowser(config, 'https://www.upwork.com/nx/find-work/best-matches', async ({ page }) => {
@@ -607,7 +670,7 @@ proposalCommand.command('packet <job>')
     const config = await loadConfig();
     const profile = await loadProfile();
     const context = await proposalContext(config, job, { includeForm: options.form !== false });
-    const packet = buildProposalPacket({ job: context.job, form: context.form, profile });
+    const packet = buildProposalPacket({ job: context.job, form: context.form, profile, lanes: resolveLanes(config) });
     const markdown = renderProposalPacket(packet);
     if (context.formError) {
       process.stderr.write(`Proposal form could not be inspected: ${context.formError}\n`);
@@ -780,17 +843,18 @@ proposalCommand.command('resume <application>')
   });
 
 proposalCommand.command('fill <application>')
-  .description('Fill and verify the live proposal form from JSON without submitting it.')
+  .description('Opt-in: fill and verify the live proposal form from JSON without submitting it.')
   .action(async (applicationFile) => {
     const { application, source } = await loadApplication(applicationFile);
     if (application.status !== 'draft') {
       throw new Error(`Application status must be draft before filling; saw ${application.status || 'missing'}`);
     }
+    const config = await loadConfig();
+    requireLiveAutomation(config);
     const offlineValidation = validateApplication(application);
     if (!offlineValidation.valid) {
       throw new Error(`Application is blocked before a live attempt:\n- ${offlineValidation.errors.join('\n- ')}`);
     }
-    const config = await loadConfig();
     let { workflow } = await trackedProposal(application, source);
     workflow = await beginProposalAttempt(workflow, 'fill', ['REVIEWED']);
     let preview;
@@ -851,7 +915,7 @@ proposalCommand.command('fill <application>')
   });
 
 proposalCommand.command('submit <application>')
-  .description('Submit only with exact-content user approval and a separate live Connects confirmation.')
+  .description('Opt-in: submit only with exact-content user approval and a separate live Connects confirmation.')
   .requiredOption('--approval <phrase>', 'exact phrase emitted by `proposal review` after the user approves every code block')
   .requiredOption('--confirm <phrase>', 'for example: "SUBMIT 13 CONNECTS"')
   .action(async (applicationFile, options) => {
@@ -863,8 +927,9 @@ proposalCommand.command('submit <application>')
     if (!offlineValidation.valid) {
       throw new Error(`Application is blocked before consent:\n- ${offlineValidation.errors.join('\n- ')}`);
     }
-    const approval = requireExplicitApproval(application, options.approval);
     const config = await loadConfig();
+    requireLiveAutomation(config);
+    const approval = requireExplicitApproval(application, options.approval);
     let { workflow } = await trackedProposal(application, source);
     if (workflow.state !== 'READY') {
       throw new Error(`Proposal submit requires a READY checkpoint; saw ${workflow.state}. ${proposalNextAction(workflow)}`);
@@ -1129,15 +1194,23 @@ program.command('doctor')
     const status = options.offline ? { running: false, checked: false } : await browserStatus(config);
     const profile = await loadProfile();
     const nextSteps = [];
-    if (!config.eligibility.freelancerCountry) nextSteps.push('Run upwork-jobs setup to set your country.');
-    if (!profile.defaultHourlyRate) nextSteps.push('Set your own default proposal rate with upwork-jobs setup.');
+    if (!config.eligibility.freelancerCountry) nextSteps.push('Run upwork-cli setup to set your country.');
+    if (!config.lanes.length) nextSteps.push('Pick your lanes with upwork-cli setup --lanes (see upwork-cli lanes).');
+    if (!profile.defaultHourlyRate) nextSteps.push('Set your own default proposal rate with upwork-cli setup.');
     if (!profile.proof.length && !profile.facts.length) nextSteps.push('Add verified evidence using docs/voice-workbook.md before drafting.');
-    if (!options.offline && !status.running) nextSteps.push('Run upwork-jobs auth to start your dedicated Chrome session.');
+    if (!options.offline && !status.running) nextSteps.push('Run upwork-cli auth to start your dedicated Chrome session.');
     const history = await databaseStats();
     const report = {
       node: process.version,
       nextSteps,
-      readiness: { countryConfigured: Boolean(config.eligibility.freelancerCountry), rateConfigured: Boolean(profile.defaultHourlyRate), evidenceCount: profile.proof.length, factCount: profile.facts.length },
+      readiness: {
+        countryConfigured: Boolean(config.eligibility.freelancerCountry),
+        rateConfigured: Boolean(profile.defaultHourlyRate),
+        lanes: config.lanes.length ? config.lanes : 'all',
+        liveProposalAutomation: config.proposals.liveAutomation,
+        evidenceCount: profile.proof.length,
+        factCount: profile.facts.length,
+      },
       chrome,
       config: configPath(),
       profile: profilePath(),

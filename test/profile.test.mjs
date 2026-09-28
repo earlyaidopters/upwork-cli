@@ -23,21 +23,21 @@ test('fresh users receive no identity, rate, claims, or proof', () => {
 
 test('initialization preserves a user profile and partial profiles inherit no evidence', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-profile-test-'));
-  const previous = process.env.UPWORK_JOBS_PROFILE;
-  process.env.UPWORK_JOBS_PROFILE = path.join(directory, 'profile.json');
+  const previous = process.env.UPWORK_CLI_PROFILE;
+  process.env.UPWORK_CLI_PROFILE = path.join(directory, 'profile.json');
   try {
     assert.equal((await initializeProfile()).created, true);
     const custom = { name: 'Synthetic User', facts: ['A supplied fact'] };
-    await fs.writeFile(process.env.UPWORK_JOBS_PROFILE, JSON.stringify(custom));
+    await fs.writeFile(process.env.UPWORK_CLI_PROFILE, JSON.stringify(custom));
     assert.equal((await initializeProfile()).created, false);
-    assert.deepEqual(JSON.parse(await fs.readFile(process.env.UPWORK_JOBS_PROFILE, 'utf8')), custom);
+    assert.deepEqual(JSON.parse(await fs.readFile(process.env.UPWORK_CLI_PROFILE, 'utf8')), custom);
     const loaded = await loadProfile();
     assert.deepEqual(loaded.facts, custom.facts);
     assert.deepEqual(loaded.proof, []);
     assert.equal(loaded.defaultHourlyRate, null);
   } finally {
-    if (previous === undefined) delete process.env.UPWORK_JOBS_PROFILE;
-    else process.env.UPWORK_JOBS_PROFILE = previous;
+    if (previous === undefined) delete process.env.UPWORK_CLI_PROFILE;
+    else process.env.UPWORK_CLI_PROFILE = previous;
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
