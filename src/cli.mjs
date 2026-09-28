@@ -81,7 +81,7 @@ const program = new Command();
 program
   .name('upwork-cli')
   .description('Find Upwork work in your lanes, keep local history, and prepare proposals from your own evidence.')
-  .version('0.14.0');
+  .version('0.14.1');
 
 const LIVE_AUTOMATION_NOTICE = [
   'Live proposal filling and submission are off. They are opt-in because Upwork’s Terms of Use (section 3.5)',

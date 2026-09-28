@@ -1,6 +1,6 @@
 {
   "name": "upwork-cli",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "Find Upwork work in your lanes, keep local job history, and prepare evidence-grounded proposals.",
   "type": "module",
   "bin": {
