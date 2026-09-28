@@ -10,7 +10,7 @@ test('allows enough time to attach to a long-lived Chrome profile', () => {
   assert.equal(cdpConnectTimeout({ browser: { timeoutMs: 30_000 } }, {}), 120_000);
   assert.equal(cdpConnectTimeout({ browser: { timeoutMs: 180_000 } }, {}), 180_000);
   assert.equal(
-    cdpConnectTimeout({ browser: { timeoutMs: 30_000 } }, { UPWORK_JOBS_CDP_TIMEOUT_MS: '240000' }),
+    cdpConnectTimeout({ browser: { timeoutMs: 30_000 } }, { UPWORK_CLI_CDP_TIMEOUT_MS: '240000' }),
     240_000,
   );
 });

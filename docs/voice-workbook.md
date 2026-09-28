@@ -1,6 +1,6 @@
 # Build your private voice and evidence profile
 
-Run `upwork-jobs init`, then `upwork-jobs proposal profile` to locate your private JSON profile. It starts empty. Keep your completed profile outside the public repository.
+Run `upwork-cli init`, then `upwork-cli proposal profile` to locate your private JSON profile. It starts empty. Keep your completed profile outside the public repository.
 
 ## Capture your voice
 

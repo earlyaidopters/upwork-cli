@@ -7,11 +7,11 @@ import { configureMember } from '../src/setup.mjs';
 
 test('member setup validates before writing and preserves unrelated private settings', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'upwork-member-test-'));
-  const keys = ['UPWORK_JOBS_HOME', 'UPWORK_JOBS_CONFIG', 'UPWORK_JOBS_PROFILE'];
+  const keys = ['UPWORK_CLI_HOME', 'UPWORK_CLI_CONFIG', 'UPWORK_CLI_PROFILE'];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
-  process.env.UPWORK_JOBS_HOME = directory;
-  delete process.env.UPWORK_JOBS_CONFIG;
-  delete process.env.UPWORK_JOBS_PROFILE;
+  process.env.UPWORK_CLI_HOME = directory;
+  delete process.env.UPWORK_CLI_CONFIG;
+  delete process.env.UPWORK_CLI_PROFILE;
   try {
     for (const rate of ['no', '0', '-4', '', 'Infinity']) {
       await assert.rejects(configureMember({ country: 'Canada', rate }), /positive number/);

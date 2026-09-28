@@ -3,7 +3,7 @@ import Table from 'cli-table3';
 import { csvCell, writeAtomic } from './util.mjs';
 
 const FIELDS = [
-  'score', 'uid', 'title', 'posted', 'proposals', 'jobType', 'hourlyMin', 'hourlyMax',
+  'score', 'lane', 'uid', 'title', 'posted', 'proposals', 'jobType', 'hourlyMin', 'hourlyMax',
   'fixedBudget', 'paymentVerified', 'clientRating', 'clientSpend', 'clientCountry',
   'locationScope', 'locationRestriction', 'eligibleForProfile', 'detailInspectedAt',
   'experienceLevel', 'duration', 'skills', 'description', 'url', 'query', 'source',
@@ -26,7 +26,7 @@ function truncate(value, width) {
 
 export function renderTable(jobs) {
   const table = new Table({
-    head: ['#', 'Score', 'Job', 'Budget', 'Posted', 'Props', 'Client', 'Query'],
+    head: ['#', 'Score', 'Job', 'Budget', 'Posted', 'Props', 'Client', 'Lane / query'],
     colWidths: [4, 7, 47, 16, 14, 12, 21, 19],
     wordWrap: true,
     style: { head: ['green'], border: ['grey'] },
@@ -43,7 +43,7 @@ export function renderTable(jobs) {
       job.posted || '',
       job.proposals || '',
       truncate(client, 32),
-      job.query || job.feedName || '',
+      [job.lane, job.query || job.feedName].filter(Boolean).join('\n'),
     ]);
   });
   return table.toString();
@@ -59,7 +59,7 @@ export function serializeJobs(jobs, format = 'table') {
     const lines = jobs.map((job, index) => [
       `## ${index + 1}. ${job.title}`,
       '',
-      `- Score: **${job.score ?? 0}**`,
+      `- Score: **${job.score ?? 0}**${job.laneLabel ? ` · Lane: ${job.laneLabel}` : ''}`,
       `- Budget: ${compactJobType(job) || 'Not listed'}`,
       `- Posted: ${job.posted || 'Unknown'} · Proposals: ${job.proposals || 'Unknown'}`,
       `- Client: ${job.paymentVerified ? 'Payment verified' : 'Payment not confirmed'} · ${money(job.clientSpend) || 'No spend shown'} · ${job.clientCountry || 'Unknown'}`,

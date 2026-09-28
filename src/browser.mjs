@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
-import { ensureDirectory, sleep, stateDirectory, UPWORK_ORIGIN } from './util.mjs';
+import { ensureDirectory, envSetting, sleep, stateDirectory, UPWORK_ORIGIN } from './util.mjs';
 
 const DEFAULT_TARGET = `${UPWORK_ORIGIN}/nx/find-work/best-matches`;
 
@@ -25,7 +25,7 @@ function chromeCandidates() {
 }
 
 export async function findChromeExecutable() {
-  if (process.env.UPWORK_JOBS_CHROME) return path.resolve(process.env.UPWORK_JOBS_CHROME);
+  if (envSetting('CHROME')) return path.resolve(envSetting('CHROME'));
   for (const candidate of chromeCandidates()) {
     if (!candidate) continue;
     try {
@@ -33,7 +33,7 @@ export async function findChromeExecutable() {
       return candidate;
     } catch {}
   }
-  throw new Error('Google Chrome was not found. Set UPWORK_JOBS_CHROME to its executable path.');
+  throw new Error('Google Chrome was not found. Set UPWORK_CLI_CHROME to its executable path.');
 }
 
 export function browserProfileDirectory(config) {
@@ -43,12 +43,12 @@ export function browserProfileDirectory(config) {
 }
 
 export function cdpEndpoint(config) {
-  const port = Number(process.env.UPWORK_JOBS_PORT || config.browser.port || 9322);
+  const port = Number(envSetting('PORT') || config.browser.port || 9322);
   return `http://127.0.0.1:${port}`;
 }
 
 export function cdpConnectTimeout(config, env = process.env) {
-  const explicit = Number(env.UPWORK_JOBS_CDP_TIMEOUT_MS);
+  const explicit = Number(envSetting('CDP_TIMEOUT_MS', env));
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
   const configured = Number(config.browser.timeoutMs || 30_000);
   return Math.max(configured, 120_000);
@@ -286,7 +286,7 @@ export async function requireUsablePage(page, { verificationSettleMs = 8_000 } =
     );
   }
   if (state.loggedOut) {
-    throw new Error('The dedicated Chrome profile is not signed in. Run `upwork-jobs auth` first.');
+    throw new Error('The dedicated Chrome profile is not signed in. Run `upwork-cli auth` first.');
   }
   return state;
 }

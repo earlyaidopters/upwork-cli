@@ -4,7 +4,7 @@ A useful proposal gives the client enough evidence to make a hiring decision. St
 
 ## Before you draft
 
-Read the job and its screening questions. Run `upwork-jobs proposal packet JOB_ID` and open your private profile. Pick one or two relevant pieces of evidence. If the evidence is missing, ask the writer for it before producing claims.
+Read the job and its screening questions. Run `upwork-cli proposal packet JOB_ID` and open your private profile. Pick one or two relevant pieces of evidence. If the evidence is missing, ask the writer for it before producing claims.
 
 Keep three things separate: what you did, what you observed, and what you hope to achieve next. Building a dashboard does not prove that it saved anyone time. Teaching an exercise does not prove that everyone adopted the tool.
 

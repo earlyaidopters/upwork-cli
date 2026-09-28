@@ -1,94 +1,80 @@
 import { ageHours, cleanText } from './util.mjs';
-
-const ROLE_TERMS = [
-  'trainer',
-  'training',
-  'workshop',
-  'consultant',
-  'consultation',
-  'advisor',
-  'coach',
-  'mentor',
-  'facilitator',
-  'learning',
-  'instructional',
-  'adoption',
-  'enablement',
-  'implementation',
-];
-
-const AI_TERMS = [
-  'artificial intelligence',
-  'generative ai',
-  'claude',
-  'codex',
-  'copilot',
-  'llm',
-  'agentic',
-  'ai agent',
-  'automation',
-  'rag',
-  'retrieval augmented generation',
-  'prompt engineering',
-  'responsible ai',
-  'governance',
-];
-
-function contains(haystack, needle) {
-  return haystack.includes(needle.toLowerCase());
-}
+import { matchesTerm, resolveLanes } from './lanes.mjs';
 
 function addReason(result, points, reason) {
   result.score += points;
   result.reasons.push(`${points >= 0 ? '+' : ''}${points} ${reason}`);
 }
 
-export function scoreJob(job, config, query = '') {
+function addCapped(result, matches, points, cap, label) {
+  let total = 0;
+  for (const term of matches) {
+    const awarded = Math.min(points, cap - total);
+    if (awarded <= 0) break;
+    total += awarded;
+    addReason(result, awarded, `${label}: ${term}`);
+  }
+}
+
+// Scores the lane-specific part of fit: what the job is and whether it matches this lane.
+function scoreLane(lane, text, config) {
+  const result = { lane, score: 0, reasons: [], strongTitleFit: false };
+  const titleMatches = lane.titleTerms.filter((term) => matchesTerm(text.title, term));
+  const bodyMatches = lane.titleTerms.filter((term) => !titleMatches.includes(term)
+    && (matchesTerm(text.skills, term) || matchesTerm(text.description, term)));
+  if (titleMatches.length) result.strongTitleFit = true;
+  addCapped(result, titleMatches, 8, 24, `${lane.label} title`);
+  addCapped(result, bodyMatches, 3, 9, `${lane.label} context`);
+
+  const contextTerms = lane.contextTerms.filter((term) => !lane.titleTerms.includes(term));
+  addCapped(result, contextTerms.filter((term) => matchesTerm(text.title, term)), 5, 15, 'context title');
+  addCapped(result, contextTerms.filter((term) => !matchesTerm(text.title, term) && matchesTerm(text.skills, term)), 3, 9, 'context skill');
+
+  const priorityKeywords = [...new Set([...(config.ranking?.priorityKeywords || []), ...lane.priorityKeywords])];
+  for (const keyword of priorityKeywords) {
+    if (matchesTerm(text.title, keyword)) {
+      result.strongTitleFit = true;
+      addReason(result, 10, `priority title: ${keyword}`);
+    } else if (matchesTerm(text.skills, keyword)) addReason(result, 5, `priority skill: ${keyword}`);
+    else if (matchesTerm(text.description, keyword)) addReason(result, 2, `priority body: ${keyword}`);
+  }
+
+  const negativeKeywords = [...new Set([...(config.ranking?.negativeKeywords || []), ...lane.negativeKeywords])];
+  for (const keyword of negativeKeywords) {
+    if (matchesTerm(text.all, keyword)) addReason(result, -15, `negative: ${keyword}`);
+  }
+
+  if (!result.strongTitleFit) addReason(result, -12, `weak title fit for your lanes (best: ${lane.label})`);
+  if (result.strongTitleFit && lane.requireContext && !lane.contextTerms.some((term) => matchesTerm(text.all, term))) {
+    addReason(result, -12, `${lane.label} role lacks AI context`);
+  }
+  for (const penalty of lane.titlePenalties) {
+    if (new RegExp(penalty.match, 'i').test(text.title) && !(penalty.unless && new RegExp(penalty.unless, 'i').test(text.title))) {
+      addReason(result, penalty.points, penalty.reason || 'lane penalty');
+    }
+  }
+  return result;
+}
+
+export function scoreJob(job, config, query = '', lanes = resolveLanes(config)) {
   const title = cleanText(job.title).toLowerCase();
   const description = cleanText(job.description).toLowerCase();
   const skills = (job.skills || []).join(' ').toLowerCase();
-  const all = `${title} ${skills} ${description}`;
-  const result = { ...job, score: 0, reasons: [] };
-  let strongTitleFit = false;
-
-  for (const term of ROLE_TERMS) {
-    if (contains(title, term)) {
-      strongTitleFit = true;
-      addReason(result, 8, `role signal: ${term}`);
-    }
-    else if (contains(skills, term) || contains(description, term)) addReason(result, 3, `role context: ${term}`);
-  }
-  for (const term of AI_TERMS) {
-    if (contains(title, term)) addReason(result, 5, `AI title: ${term}`);
-    else if (contains(skills, term)) addReason(result, 3, `AI skill: ${term}`);
-  }
-
-  const priorityKeywords = config.ranking?.priorityKeywords || [];
-  for (const keyword of priorityKeywords) {
-    const normalized = keyword.toLowerCase();
-    if (contains(title, normalized)) {
-      strongTitleFit = true;
-      addReason(result, 10, `priority title: ${keyword}`);
-    }
-    else if (contains(skills, normalized)) addReason(result, 5, `priority skill: ${keyword}`);
-    else if (contains(description, normalized)) addReason(result, 2, `priority body: ${keyword}`);
-  }
-
-  for (const keyword of config.ranking?.negativeKeywords || []) {
-    if (contains(all, keyword.toLowerCase())) addReason(result, -15, `negative: ${keyword}`);
-  }
+  const text = { title, description, skills, all: `${title} ${skills} ${description}` };
+  const best = lanes
+    .map((lane) => scoreLane(lane, text, config))
+    .reduce((top, candidate) => (candidate.score > top.score ? candidate : top));
+  const result = {
+    ...job,
+    lane: best.lane.id,
+    laneLabel: best.lane.label,
+    score: best.score,
+    reasons: [...best.reasons],
+  };
 
   const queryTerms = cleanText(query).toLowerCase().split(' ').filter((term) => term.length > 2);
-  const matchedQueryTerms = queryTerms.filter((term) => contains(title, term));
+  const matchedQueryTerms = queryTerms.filter((term) => matchesTerm(title, term));
   if (matchedQueryTerms.length) addReason(result, matchedQueryTerms.length * 3, 'query/title alignment');
-  if (!strongTitleFit) addReason(result, -12, 'weak title fit for the freelancer’s consulting/training focus');
-  const hasAiContext = AI_TERMS.some((term) => contains(all, term));
-  if (strongTitleFit && !hasAiContext) addReason(result, -12, 'training/consulting role lacks AI context');
-  const looksLikeModelTraining = /\b(model training|training data|train(?:ing)? (?:an? )?model|computer vision)\b/i.test(title);
-  const looksLikeHumanEnablement = /\b(trainer|workshop|consultant|coach|mentor|facilitator|instructional|learning content)\b/i.test(title);
-  if (looksLikeModelTraining && !looksLikeHumanEnablement) {
-    addReason(result, -15, 'model/data training rather than human enablement');
-  }
 
   if (job.paymentVerified) addReason(result, 6, 'payment verified');
   else addReason(result, -3, 'payment unverified');
@@ -133,8 +119,9 @@ export function scoreJob(job, config, query = '') {
 }
 
 export function rankJobs(jobs, config) {
+  const lanes = resolveLanes(config);
   return jobs
-    .map((job) => scoreJob(job, config, job.query || ''))
+    .map((job) => scoreJob(job, config, job.query || '', lanes))
     .sort((a, b) => b.score - a.score || (a.ageHours ?? Infinity) - (b.ageHours ?? Infinity));
 }
 

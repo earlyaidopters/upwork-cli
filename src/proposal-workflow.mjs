@@ -233,8 +233,8 @@ export async function markProposalReviewed(workflow, fingerprint, options = {}) 
   if (workflow.activeAttempt || await getProposalLease(workflow.jobUid, options)) {
     throw new Error('A live proposal attempt owns the browser. Run proposal status; do not review or restart it concurrently.');
   }
-  if (workflow.state === 'BLOCKED') throw new Error('Proposal workflow is BLOCKED. Run `upwork-jobs proposal resume <application>` first.');
-  if (workflow.state === 'MANUAL_CONTROL') throw new Error('Proposal workflow is under MANUAL_CONTROL. Run `upwork-jobs proposal resume <application>` first.');
+  if (workflow.state === 'BLOCKED') throw new Error('Proposal workflow is BLOCKED. Run `upwork-cli proposal resume <application>` first.');
+  if (workflow.state === 'MANUAL_CONTROL') throw new Error('Proposal workflow is under MANUAL_CONTROL. Run `upwork-cli proposal resume <application>` first.');
   return transitionProposalWorkflow(workflow.jobUid, 'REVIEWED', {
     reason: 'mandatory-review-rendered',
     patch: {
@@ -257,9 +257,9 @@ export async function beginProposalAttempt(workflow, command, expectedStates, op
     }
     if (!expectedStates.includes(latest.state)) {
       const next = latest.state === 'DRAFT'
-        ? 'Run `upwork-jobs proposal review <application>` first.'
+        ? 'Run `upwork-cli proposal review <application>` first.'
         : latest.state === 'BLOCKED' || latest.state === 'MANUAL_CONTROL'
-          ? 'Run `upwork-jobs proposal resume <application>` before another live attempt.'
+          ? 'Run `upwork-cli proposal resume <application>` before another live attempt.'
           : `Expected workflow state ${expectedStates.join(' or ')}, saw ${latest.state}.`;
       throw new Error(`Proposal ${command} is not allowed from ${latest.state}. ${next}`);
     }
@@ -324,8 +324,8 @@ export async function markProposalReady(workflow, checkpoint, options = {}) {
 
 export function classifyProposalFailure(error) {
   const message = String(error?.message || error || 'Unknown proposal failure');
-  if (/not signed in|run `upwork-jobs auth`/i.test(message)) {
-    return { category: 'authentication', requiredAction: 'Run `upwork-jobs auth`, sign in, then run proposal resume once.' };
+  if (/not signed in|run `upwork-cli auth`/i.test(message)) {
+    return { category: 'authentication', requiredAction: 'Run `upwork-cli auth`, sign in, then run proposal resume once.' };
   }
   if (/verification page|captcha|cloudflare/i.test(message)) {
     return { category: 'browser-verification', requiredAction: 'Complete the visible browser verification manually, then run proposal resume once.' };

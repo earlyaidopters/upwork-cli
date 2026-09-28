@@ -14,4 +14,4 @@ Do not read or change another local installation's live state to test this proje
 
 ## Proposals
 
-Discovery is read-only. Proposal submission requires approval for the exact final content plus separate live Connects confirmation. Preserve workflow states, fingerprints, browser ownership, and terminal submission records. Never retry a blocked live action automatically.
+Discovery is read-only. Live proposal filling and submission are opt-in through `proposals.liveAutomation` (default false); never enable it on a user's behalf, and never weaken or bypass that gate. When it is off, end at `proposal review` so the user pastes and submits. Proposal submission requires approval for the exact final content plus separate live Connects confirmation. Preserve workflow states, fingerprints, browser ownership, and terminal submission records. Never retry a blocked live action automatically.
